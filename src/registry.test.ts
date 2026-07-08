@@ -20,6 +20,13 @@ test("getByNum finds a session by its number", () => {
   expect(reg.getByNum(999)).toBeUndefined();
 });
 
+test("update stores a per-session cwd", () => {
+  reg.create("t-a", "alpha");
+  const updated = reg.update("t-a", { cwd: "/Users/me/proj" });
+  expect(updated.cwd).toBe("/Users/me/proj");
+  expect(reg.get("t-a")?.cwd).toBe("/Users/me/proj");
+});
+
 test("remove deletes a record and reports whether it existed", () => {
   reg.create("t-a", "alpha");
   expect(reg.remove("t-a")).toBe(true);

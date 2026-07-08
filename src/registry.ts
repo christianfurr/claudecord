@@ -15,6 +15,8 @@ export interface SessionRecord {
   status: "active" | "ended";
   /** Per-session model override (set by /model); falls back to settings.model. */
   model?: string;
+  /** Per-session working directory (set for handed-off terminal sessions); falls back to settings.workDir. */
+  cwd?: string;
   createdAt: string;
   updatedAt: string;
 }
