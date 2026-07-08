@@ -6,12 +6,13 @@ import {
   type Message,
 } from "discord.js";
 import { spawn } from "node:child_process";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync, readdirSync, unlinkSync, watch } from "node:fs";
 import { join } from "node:path";
 import { Registry, type SessionRecord } from "./registry.js";
 import { CONFIG_DIR, loadSettings, saveSettings, type Settings } from "./config.js";
 import { SessionRuntime, type UserContent } from "./session.js";
 import { welcomeEmbed, endedEmbed } from "./format.js";
+import { readHandoff, quarantineHandoff, HANDOFF_DIR, type HandoffRequest } from "./handoffs.js";
 import type { RuntimeInfo, SessionServiceHost } from "./sessions.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -89,15 +90,20 @@ export class Claudecord implements SessionServiceHost {
     runtime.send(await this.buildContent(message), message);
   }
 
-  ensureRuntime(thread: AnyThreadChannel, record: SessionRecord, fresh = false): SessionRuntime {
+  ensureRuntime(
+    thread: AnyThreadChannel,
+    record: SessionRecord,
+    opts: { fresh?: boolean; forkSession?: boolean } = {},
+  ): SessionRuntime {
     const existing = this.runtimes.get(thread.id);
-    if (existing && !fresh) return existing;
+    if (existing && !opts.fresh) return existing;
     const runtime = new SessionRuntime(
       thread,
       record,
       this.registry,
       this.settings,
-      fresh ? undefined : record.sdkSessionId,
+      opts.fresh ? undefined : record.sdkSessionId,
+      opts.forkSession ?? false,
     );
     this.runtimes.set(thread.id, runtime);
     return runtime;
@@ -133,6 +139,65 @@ export class Claudecord implements SessionServiceHost {
     const runtime = this.ensureRuntime(thread, record);
     runtime.send([{ type: "text", text: prompt }], starter ?? undefined);
     return thread;
+  }
+
+  /**
+   * Create a session post that resumes a terminal Claude session (handoff).
+   * Forks a new session id from the terminal's history so the terminal's own
+   * .jsonl is never written to. No prompt is sent — the user's first Discord
+   * message becomes the next turn.
+   */
+  async createHandoffPost(req: HandoffRequest): Promise<void> {
+    if (!this.settings.forumChannelId) throw new Error("No forum configured — run /setup first.");
+    const forum = await this.client.channels.fetch(this.settings.forumChannelId);
+    if (!forum || forum.type !== ChannelType.GuildForum) {
+      throw new Error("Configured forum channel is missing — re-run /setup.");
+    }
+    const thread = await forum.threads.create({
+      name: req.title.slice(0, 100),
+      message: {
+        content: "↩ Continued from your terminal session. Send a message to pick up where you left off.",
+      },
+      appliedTags: this.settings.tagActiveId ? [this.settings.tagActiveId] : [],
+    });
+    this.registry.get(thread.id) ?? this.registry.create(thread.id, req.title);
+    const record = this.registry.update(thread.id, { sdkSessionId: req.sessionId, cwd: req.cwd });
+    // Pre-create the runtime with forkSession so the resume branches a new id
+    // (recorded via system:init) before any turn touches the terminal's file.
+    this.ensureRuntime(thread, record, { forkSession: true });
+  }
+
+  /** Drain any pending handoff files, then watch the directory for new ones. */
+  startHandoffWatcher(): void {
+    mkdirSync(HANDOFF_DIR, { recursive: true });
+    for (const name of readdirSync(HANDOFF_DIR)) {
+      if (name.endsWith(".json")) void this.processHandoffFile(join(HANDOFF_DIR, name));
+    }
+    watch(HANDOFF_DIR, (_event, filename) => {
+      if (filename && filename.endsWith(".json")) {
+        void this.processHandoffFile(join(HANDOFF_DIR, filename));
+      }
+    });
+  }
+
+  private async processHandoffFile(path: string): Promise<void> {
+    let req: HandoffRequest;
+    try {
+      req = readHandoff(path);
+    } catch {
+      return; // partial write / .tmp rename in flight, or already processed — ignore
+    }
+    try {
+      await this.createHandoffPost(req);
+      unlinkSync(path);
+    } catch (err) {
+      console.error("handoff failed:", err);
+      try {
+        quarantineHandoff(path);
+      } catch {
+        /* file may already be gone */
+      }
+    }
   }
 
   /**

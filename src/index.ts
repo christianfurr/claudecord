@@ -28,6 +28,9 @@ app.client.once(Events.ClientReady, async (client) => {
 
   control = startControlServer(app);
   console.log(`control socket listening at ${CONTROL_SOCKET}`);
+
+  app.startHandoffWatcher();
+  console.log("watching for terminal handoffs");
 });
 
 app.client.on(Events.InteractionCreate, (interaction) => {

@@ -230,7 +230,7 @@ async function handleClear(app: Claudecord, interaction: ChatInputCommandInterac
   await interaction.deferReply();
   await app.dropRuntime(thread.id);
   app.registry.update(thread.id, { sdkSessionId: undefined, status: "active" });
-  app.ensureRuntime(thread, app.registry.get(thread.id)!, true);
+  app.ensureRuntime(thread, app.registry.get(thread.id)!, { fresh: true });
   await interaction.editReply("🧹 Context cleared — this post now has a fresh session with no memory of the above.");
 }
 
