@@ -15,6 +15,15 @@ export const commandDefinitions = [
     .setDescription("Create the claude-sessions forum channel and wire claudecord to it")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
   new SlashCommandBuilder()
+    .setName("new")
+    .setDescription("Start a new Claude session — creates a titled post and sends your prompt")
+    .addStringOption((opt) =>
+      opt.setName("prompt").setDescription("What do you want Claude to do?").setRequired(true),
+    )
+    .addStringOption((opt) =>
+      opt.setName("title").setDescription("Post title (defaults to the prompt)").setMaxLength(100),
+    ),
+  new SlashCommandBuilder()
     .setName("status")
     .setDescription("Show all Claude sessions and bot health"),
   new SlashCommandBuilder()
@@ -35,6 +44,8 @@ export async function handleCommand(app: Claudecord, interaction: ChatInputComma
   switch (interaction.commandName) {
     case "setup":
       return handleSetup(app, interaction);
+    case "new":
+      return handleNew(app, interaction);
     case "status":
       return handleStatus(app, interaction);
     case "clear":
@@ -80,6 +91,26 @@ async function handleSetup(app: Claudecord, interaction: ChatInputCommandInterac
       embeds: [errorEmbed(`Setup failed (does the bot have Manage Channels?): ${String(err)}`)],
     });
   }
+}
+
+async function handleNew(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  const prompt = interaction.options.getString("prompt", true);
+  const title = interaction.options.getString("title") ?? deriveTitle(prompt);
+  await interaction.deferReply();
+  try {
+    const thread = await app.createSessionPost(title, prompt);
+    await interaction.editReply(`🧵 Session started: <#${thread.id}>`);
+  } catch (err) {
+    await interaction.editReply({ embeds: [errorEmbed(String(err))] });
+  }
+}
+
+/** First sentence-ish of the prompt, cleaned up for a post title. */
+function deriveTitle(prompt: string): string {
+  const oneLine = prompt.replace(/\s+/g, " ").trim();
+  const sentenceEnd = oneLine.search(/[.!?]\s/);
+  const candidate = sentenceEnd > 8 && sentenceEnd < 90 ? oneLine.slice(0, sentenceEnd) : oneLine;
+  return candidate.length <= 90 ? candidate : candidate.slice(0, 89) + "…";
 }
 
 async function handleStatus(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {

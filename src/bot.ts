@@ -95,6 +95,30 @@ export class Claudecord {
     }
   }
 
+  /**
+   * Create a session post programmatically (used by /new). The starter message
+   * is bot-authored, so the messageCreate handler ignores it — we feed the
+   * prompt to the session directly and use the starter message for acks.
+   */
+  async createSessionPost(title: string, prompt: string): Promise<AnyThreadChannel> {
+    if (!this.settings.forumChannelId) throw new Error("No forum configured — run /setup first.");
+    const forum = await this.client.channels.fetch(this.settings.forumChannelId);
+    if (!forum || forum.type !== ChannelType.GuildForum) {
+      throw new Error("Configured forum channel is missing — re-run /setup.");
+    }
+    const thread = await forum.threads.create({
+      name: title.slice(0, 100),
+      message: { content: prompt },
+      appliedTags: this.settings.tagActiveId ? [this.settings.tagActiveId] : [],
+    });
+    const record = this.registry.get(thread.id) ?? this.registry.create(thread.id, thread.name);
+    const starter = await thread.fetchStarterMessage().catch(() => null);
+    if (starter) await starter.react("🤔").catch(() => undefined);
+    const runtime = this.ensureRuntime(thread, record);
+    runtime.send([{ type: "text", text: prompt }], starter ?? undefined);
+    return thread;
+  }
+
   private async buildContent(message: Message): Promise<UserContent> {
     const blocks: Exclude<UserContent, string> = [];
     const text = message.content.trim();
