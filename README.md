@@ -41,6 +41,11 @@ New post → new session. Claude works right in the post — thinking, tool call
 - 📊 **Live session dashboard** — an embed in every post that updates after each
   turn: model, running cost, context meter (▰▰▰▱ %), turns, and time worked.
   `/model` switches models mid-session without losing context.
+- 📟→🧵 **Terminal handoff** — hand a Claude Code session running in your terminal
+  off to Discord mid-task via the `handoff_to_discord` MCP tool. It forks the
+  session id and opens a new post that continues the same conversation, so you can
+  walk away from your machine and keep going from your phone. See
+  [Continue a terminal session in Discord](#continue-a-terminal-session-in-discord).
 - 🪶 **One process** — discord.js + the Claude Agent SDK. No tmux, no HTTP relay,
   no shell hooks, nothing to babysit.
 
