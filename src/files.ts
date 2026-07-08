@@ -62,6 +62,16 @@ export function validateOutboundFile(input: string, home: string = homedir()): O
 }
 
 /**
+ * A materialized file has allocated blocks on disk; an iCloud-evicted (dataless)
+ * placeholder reports its logical size but zero blocks. Reading such a file faults
+ * it in from the file provider, which fails with EDEADLK when the process can't
+ * service the download — so callers must materialize it first.
+ */
+export function isDatalessStat(stat: { size: number; blocks: number }): boolean {
+  return stat.size > 0 && stat.blocks === 0;
+}
+
+/**
  * Reduce a user-supplied attachment name to a safe single path component so a
  * crafted name (e.g. `../../evil`) can't write outside the inbox directory.
  */

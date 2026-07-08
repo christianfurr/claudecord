@@ -6,6 +6,7 @@ import {
   validateOutboundFile,
   sanitizeFilename,
   isSecretFilename,
+  isDatalessStat,
   MAX_UPLOAD_BYTES,
 } from "./files.js";
 
@@ -89,6 +90,12 @@ test("sanitizeFilename strips path components, traversal, and leading dots", () 
   expect(sanitizeFilename("...hidden")).toBe("hidden");
   expect(sanitizeFilename("")).toBe("file");
   expect(sanitizeFilename("   ")).toBe("file");
+});
+
+test("isDatalessStat flags a zero-block file with nonzero size (iCloud placeholder)", () => {
+  expect(isDatalessStat({ size: 847987, blocks: 0 })).toBe(true);
+  expect(isDatalessStat({ size: 261450, blocks: 512 })).toBe(false);
+  expect(isDatalessStat({ size: 0, blocks: 0 })).toBe(false); // genuinely empty file
 });
 
 test("isSecretFilename matches the deny-list and passes normal names", () => {
