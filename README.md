@@ -71,11 +71,38 @@ claudecord rides your existing Claude subscription. (Alternatively, set
 git clone https://github.com/christianfurr/claudecord.git
 cd claudecord
 bun install
+bun link             # puts the `claudecord` command on your PATH
 
 # Put your bot token in a .env file (Bun loads it automatically):
 echo "DISCORD_TOKEN=your-bot-token" > .env
 
-bun start            # or: bun dev (auto-restarts on changes)
+claudecord install   # installs + starts the macOS daemon (launchd)
+claudecord status
+```
+
+Prefer to run it in the foreground instead of as a daemon? `bun start` (or
+`bun dev` for auto-restart on changes).
+
+### The `claudecord` CLI
+
+| Command | What it does |
+|---|---|
+| `claudecord install` | Write the LaunchAgent (token embedded, `0600`) and start it — runs at login, auto-restarts on crash |
+| `claudecord status` | Daemon state + pid, session counts, recent log |
+| `claudecord start` / `stop` / `restart` | Control the daemon |
+| `claudecord logs` | Tail the logs (`~/.claudecord/logs/`) |
+| `claudecord run` | Run in the foreground (no daemon) |
+| `claudecord uninstall` | Remove the daemon (repo and config untouched) |
+
+### Menu bar (optional)
+
+A [SwiftBar](https://swiftbar.app)/xbar plugin ships in `extras/`: a 🤖 in your menu
+bar (with the active-session count), green/red status, and Start/Stop/Restart/logs
+one click away.
+
+```bash
+brew install swiftbar   # or xbar
+ln -s "$(pwd)/extras/claudecord.5s.sh" "$HOME/Library/Application Support/SwiftBar/Plugins/"
 ```
 
 You should see:

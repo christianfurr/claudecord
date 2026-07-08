@@ -23,5 +23,8 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "typescript": "^7.0.2"
+  },
+  "bin": {
+    "claudecord": "./src/cli.ts"
   }
 }
