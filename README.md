@@ -5,7 +5,7 @@
 <br/>
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-8b7cf6.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A518-4ade80?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Bun](https://img.shields.io/badge/bun-%E2%89%A51.1-f9f1e1?logo=bun&logoColor=black)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
 [![discord.js](https://img.shields.io/badge/discord.js-v14-5865F2?logo=discord&logoColor=white)](https://discord.js.org)
 [![Claude Agent SDK](https://img.shields.io/badge/Claude-Agent%20SDK-d97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/agent-sdk)
@@ -62,21 +62,20 @@ Read Message History.
 
 ### 2. Install and run
 
-Requires **Node 18+** and a machine where the [Claude Code](https://claude.com/claude-code)
-CLI is logged in — claudecord rides your existing Claude subscription. (Alternatively,
-set `ANTHROPIC_API_KEY`.)
+Requires [**Bun**](https://bun.sh) (`curl -fsSL https://bun.sh/install | bash`) and a
+machine where the [Claude Code](https://claude.com/claude-code) CLI is logged in —
+claudecord rides your existing Claude subscription. (Alternatively, set
+`ANTHROPIC_API_KEY`.)
 
 ```bash
 git clone https://github.com/christianfurr/claudecord.git
 cd claudecord
-npm install
+bun install
 
-# Put your bot token in a .env file:
+# Put your bot token in a .env file (Bun loads it automatically):
 echo "DISCORD_TOKEN=your-bot-token" > .env
 
-npm run dev          # development (tsx)
-# or
-npm run build && npm start
+bun start            # or: bun dev (auto-restarts on changes)
 ```
 
 You should see:

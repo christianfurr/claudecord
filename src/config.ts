@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { z } from "zod";
-import "dotenv/config";
+// No dotenv needed — Bun loads .env automatically.
 
 export const CONFIG_DIR = join(homedir(), ".claudecord");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
@@ -33,7 +33,7 @@ export function getDiscordToken(): string {
   const token = process.env.DISCORD_TOKEN;
   if (!token) {
     throw new Error(
-      "DISCORD_TOKEN is not set. Export it or put it in a .env file next to package.json.",
+      "DISCORD_TOKEN is not set. Export it or put it in a .env file next to package.json (Bun loads .env automatically).",
     );
   }
   return token;
