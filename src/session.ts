@@ -98,6 +98,37 @@ interface PendingTurn {
 
 export type UserContent = SDKUserMessage["message"]["content"];
 
+/** Build the Agent SDK options for a session. Pure — safe to unit test. */
+export function buildQueryOptions(
+  record: SessionRecord,
+  settings: Settings,
+  resumeSessionId?: string,
+  forkSession = false,
+): Options {
+  const model = record.model ?? settings.model;
+  return {
+    cwd: record.cwd ?? settings.workDir,
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    // "project" would load the workDir's CLAUDE.md — which on this machine still
+    // carries the legacy tmux-bridge reply rules (dp commands). Claudecord owns
+    // message delivery itself, so only user-level settings are loaded.
+    settingSources: ["user"],
+    ...(model ? { model } : {}),
+    ...(resumeSessionId ? { resume: resumeSessionId, forkSession } : {}),
+    systemPrompt: {
+      type: "preset",
+      preset: "claude_code",
+      append:
+        `You are connected to Discord through claudecord. This conversation is a Discord ` +
+        `forum post titled "${record.title}". Everything you write is delivered to the post ` +
+        `automatically — never try to send Discord messages yourself. Discord renders ` +
+        `markdown but not tables-heavy layouts; keep replies conversational and reasonably ` +
+        `concise. Your tool activity is mirrored to the post as a live feed.`,
+    },
+  };
+}
+
 export class SessionRuntime {
   private queue = new AsyncQueue<SDKUserMessage>();
   private q: Query;
@@ -121,31 +152,11 @@ export class SessionRuntime {
     private registry: Registry,
     settings: Settings,
     resumeSessionId?: string,
+    forkSession = false,
   ) {
     this.feed = new ActivityFeed(thread);
-    const model = record.model ?? settings.model;
-    this.stats.model = model;
-    const options: Options = {
-      cwd: settings.workDir,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      // "project" would load the workDir's CLAUDE.md — which on this machine still
-      // carries the legacy tmux-bridge reply rules (dp commands). Claudecord owns
-      // message delivery itself, so only user-level settings are loaded.
-      settingSources: ["user"],
-      ...(model ? { model } : {}),
-      ...(resumeSessionId ? { resume: resumeSessionId } : {}),
-      systemPrompt: {
-        type: "preset",
-        preset: "claude_code",
-        append:
-          `You are connected to Discord through claudecord. This conversation is a Discord ` +
-        `forum post titled "${record.title}". Everything you write is delivered to the post ` +
-        `automatically — never try to send Discord messages yourself. Discord renders ` +
-          `markdown but not tables-heavy layouts; keep replies conversational and reasonably ` +
-          `concise. Your tool activity is mirrored to the post as a live feed.`,
-      },
-    };
+    this.stats.model = record.model ?? settings.model;
+    const options = buildQueryOptions(record, settings, resumeSessionId, forkSession);
     this.q = query({ prompt: this.queue, options });
     void this.consume();
   }
