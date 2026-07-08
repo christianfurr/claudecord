@@ -35,6 +35,9 @@ New post → new session. Claude works right in the post — thinking, tool call
   memory intact (sessions resume by SDK session id).
 - 🖼️ **Images** — attach screenshots or photos to any message; they're passed to
   Claude inline.
+- 📊 **Live session dashboard** — an embed in every post that updates after each
+  turn: model, running cost, context meter (▰▰▰▱ %), turns, and time worked.
+  `/model` switches models mid-session without losing context.
 - 🪶 **One process** — discord.js + the Claude Agent SDK. No tmux, no HTTP relay,
   no shell hooks, nothing to babysit.
 
@@ -147,7 +150,8 @@ it remembers everything. Sessions survive bot restarts and can be picked up days
 | `/setup` | anywhere | One-time: creates the forum + tags and saves the config |
 | `/new prompt: [title:]` | anywhere | Start a session without leaving the keyboard — creates the titled post and sends the prompt |
 | `/status` | anywhere | Every session with live/working/dormant state, uptime, model |
-| `/open` | in a post | Pop the session open in Terminal on the host Mac (`claude --resume`) |
+| `/open` | in a post | Pop the session open in Ghostty on the host Mac (`claude --resume`) |
+| `/model model:` | in a post | Switch the session's model live (Opus, Sonnet, Haiku, Fable, or default) |
 | `/clear` | in a post | Wipe the session's memory — fresh start, same post |
 | `/end` | in a post | End the session, tag it ✅ Done, archive the post |
 | `/rename title:` | in a post | Rename the post (and the session) |

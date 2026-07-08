@@ -2,7 +2,7 @@ import { query, type Query, type Options, type SDKUserMessage } from "@anthropic
 import type { AnyThreadChannel, Message } from "discord.js";
 import type { Registry, SessionRecord } from "./registry.js";
 import type { Settings } from "./config.js";
-import { activityLine, chunk, errorEmbed, truncate } from "./format.js";
+import { activityLine, chunk, errorEmbed, sessionInfoEmbed, truncate, type SessionStats } from "./format.js";
 
 /** Push-based async iterable — the SDK's streaming input reads from this. */
 class AsyncQueue<T> implements AsyncIterable<T> {
@@ -104,7 +104,16 @@ export class SessionRuntime {
   private feed: ActivityFeed;
   private pendingTurns: PendingTurn[] = [];
   private disposed = false;
+  private infoMessage: Message | undefined;
   busy = false;
+  readonly stats: SessionStats = {
+    totalCostUsd: 0,
+    userTurns: 0,
+    wallMs: 0,
+    contextTokens: 0,
+    contextWindow: 0,
+    startedAt: Date.now(),
+  };
 
   constructor(
     private thread: AnyThreadChannel,
@@ -114,6 +123,8 @@ export class SessionRuntime {
     resumeSessionId?: string,
   ) {
     this.feed = new ActivityFeed(thread);
+    const model = record.model ?? settings.model;
+    this.stats.model = model;
     const options: Options = {
       cwd: settings.workDir,
       permissionMode: "bypassPermissions",
@@ -122,7 +133,7 @@ export class SessionRuntime {
       // carries the legacy tmux-bridge reply rules (dp commands). Claudecord owns
       // message delivery itself, so only user-level settings are loaded.
       settingSources: ["user"],
-      ...(settings.model ? { model: settings.model } : {}),
+      ...(model ? { model } : {}),
       ...(resumeSessionId ? { resume: resumeSessionId } : {}),
       systemPrompt: {
         type: "preset",
@@ -151,6 +162,14 @@ export class SessionRuntime {
     } as SDKUserMessage);
   }
 
+  /** Switch model mid-session (undefined = back to the Claude Code default). */
+  async setModel(model?: string): Promise<void> {
+    await this.q.setModel(model);
+    this.stats.model = model;
+    this.registry.update(this.record.threadId, { model });
+    await this.updateInfo();
+  }
+
   async interrupt(): Promise<void> {
     try {
       await this.q.interrupt();
@@ -173,6 +192,7 @@ export class SessionRuntime {
           case "system":
             if (msg.subtype === "init") {
               this.registry.update(this.record.threadId, { sdkSessionId: msg.session_id });
+              this.stats.model = msg.model;
             }
             break;
 
@@ -182,6 +202,14 @@ export class SessionRuntime {
               break;
             }
             const isSubagent = msg.parent_tool_use_id !== null;
+            if (!isSubagent && msg.message.usage) {
+              const u = msg.message.usage;
+              this.stats.contextTokens =
+                (u.input_tokens ?? 0) +
+                (u.cache_read_input_tokens ?? 0) +
+                (u.cache_creation_input_tokens ?? 0) +
+                (u.output_tokens ?? 0);
+            }
             for (const block of msg.message.content) {
               if (block.type === "thinking" && !isSubagent) {
                 const text = block.thinking?.trim();
@@ -204,6 +232,15 @@ export class SessionRuntime {
             const turn = this.pendingTurns.shift();
             this.busy = this.pendingTurns.length > 0;
             this.feed.reset();
+            this.stats.totalCostUsd = msg.total_cost_usd;
+            this.stats.userTurns += 1;
+            this.stats.wallMs += msg.duration_ms;
+            for (const usage of Object.values(msg.modelUsage ?? {})) {
+              if (usage.contextWindow > this.stats.contextWindow) {
+                this.stats.contextWindow = usage.contextWindow;
+              }
+            }
+            await this.updateInfo();
             if (msg.subtype === "success") {
               await this.ack(turn, "✅");
             } else {
@@ -234,6 +271,17 @@ export class SessionRuntime {
       await this.thread.send({ embeds: [errorEmbed(message)] });
     } catch {
       /* thread may be gone */
+    }
+  }
+
+  private async updateInfo(): Promise<void> {
+    try {
+      const embed = sessionInfoEmbed(this.stats);
+      if (this.infoMessage) await this.infoMessage.edit({ embeds: [embed] });
+      else this.infoMessage = await this.thread.send({ embeds: [embed] });
+    } catch (err) {
+      console.error("session info update failed:", err);
+      this.infoMessage = undefined; // recreate next time (message may have been deleted)
     }
   }
 

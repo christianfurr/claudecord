@@ -11,6 +11,8 @@ export interface SessionRecord {
   sdkSessionId?: string;
   title: string;
   status: "active" | "ended";
+  /** Per-session model override (set by /model); falls back to settings.model. */
+  model?: string;
   createdAt: string;
   updatedAt: string;
 }

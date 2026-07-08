@@ -35,8 +35,26 @@ while (runtime.busy && Date.now() < deadline) {
   await new Promise((r) => setTimeout(r, 2000));
 }
 
-const ok = !runtime.busy && replies.some((r) => r.includes("E2E OK"));
-console.log(ok ? "✅ E2E PASS — reply delivered to Discord" : `❌ E2E FAIL — busy=${runtime.busy}, replies=${JSON.stringify(replies)}`);
+const turn1 = !runtime.busy && replies.some((r) => r.includes("E2E OK"));
+console.log(turn1 ? "✅ turn 1 delivered" : "❌ turn 1 failed");
+console.log("stats after turn 1:", JSON.stringify(runtime.stats));
+const statsOk =
+  runtime.stats.userTurns === 1 && runtime.stats.totalCostUsd > 0 && runtime.stats.contextWindow > 0;
+console.log(statsOk ? "✅ stats populated (cost, turns, context window)" : "❌ stats missing");
 
+// Live model switch, then a second turn on the new model.
+await runtime.setModel("claude-haiku-4-5");
+console.log("model switched to:", runtime.stats.model);
+runtime.send([{ type: "text", text: "What model are you? Answer in one short sentence, no tools." }]);
+const deadline2 = Date.now() + 120_000;
+while (runtime.busy && Date.now() < deadline2) {
+  await new Promise((r) => setTimeout(r, 2000));
+}
+const turn2 = !runtime.busy && runtime.stats.userTurns === 2;
+console.log(turn2 ? "✅ turn 2 completed on switched model" : "❌ turn 2 failed");
+console.log("stats after turn 2:", JSON.stringify(runtime.stats));
+
+const ok = turn1 && statsOk && turn2;
+console.log(ok ? "✅ E2E PASS" : "❌ E2E FAIL");
 await app.shutdown();
 process.exit(ok ? 0 : 1);

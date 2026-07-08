@@ -33,6 +33,22 @@ export const commandDefinitions = [
     .setName("end")
     .setDescription("End this session and archive the post"),
   new SlashCommandBuilder()
+    .setName("model")
+    .setDescription("Switch this session's model")
+    .addStringOption((opt) =>
+      opt
+        .setName("model")
+        .setDescription("Model to use from now on")
+        .setRequired(true)
+        .addChoices(
+          { name: "Default (your Claude Code default)", value: "default" },
+          { name: "Opus 4.8", value: "claude-opus-4-8" },
+          { name: "Sonnet 5", value: "claude-sonnet-5" },
+          { name: "Haiku 4.5", value: "claude-haiku-4-5" },
+          { name: "Fable 5", value: "claude-fable-5" },
+        ),
+    ),
+  new SlashCommandBuilder()
     .setName("open")
     .setDescription("Open this session in Terminal on the host Mac (claude --resume)"),
   new SlashCommandBuilder()
@@ -57,6 +73,8 @@ export async function handleCommand(app: Claudecord, interaction: ChatInputComma
       return handleEnd(app, interaction);
     case "open":
       return handleOpen(app, interaction);
+    case "model":
+      return handleModel(app, interaction);
     case "rename":
       return handleRename(app, interaction);
     default:
@@ -168,6 +186,25 @@ async function handleEnd(app: Claudecord, interaction: ChatInputCommandInteracti
   await app.applyTag(thread, "done");
   await interaction.editReply({ embeds: [endedEmbed(updated)] });
   await thread.setArchived(true).catch(() => undefined);
+}
+
+async function handleModel(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  const thread = sessionThread(app, interaction);
+  const record = thread && app.registry.get(thread.id);
+  if (!thread || !record) {
+    await interaction.reply({ content: "Run this inside a session post.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const choice = interaction.options.getString("model", true);
+  const model = choice === "default" ? undefined : choice;
+  await interaction.deferReply();
+  try {
+    const runtime = app.ensureRuntime(thread, record);
+    await runtime.setModel(model);
+    await interaction.editReply(`🧠 Model set to **${model ?? "default"}** for this session.`);
+  } catch (err) {
+    await interaction.editReply({ embeds: [errorEmbed(String(err))] });
+  }
 }
 
 async function handleOpen(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {

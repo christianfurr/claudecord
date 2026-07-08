@@ -119,3 +119,55 @@ function formatUptime(sec: number): string {
   const m = Math.floor((sec % 3600) / 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
+
+export interface SessionStats {
+  model?: string;
+  totalCostUsd: number;
+  userTurns: number;
+  wallMs: number;
+  contextTokens: number;
+  contextWindow: number;
+  startedAt: number;
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
+}
+
+function fmtCost(usd: number): string {
+  return usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`;
+}
+
+function fmtDuration(ms: number): string {
+  const sec = Math.round(ms / 1000);
+  if (sec < 90) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  return min < 90 ? `${min}m ${sec % 60}s` : `${Math.floor(min / 60)}h ${min % 60}m`;
+}
+
+/** Live per-session dashboard, edited in place after every turn. */
+export function sessionInfoEmbed(stats: SessionStats): EmbedBuilder {
+  const pct = stats.contextWindow > 0 ? (stats.contextTokens / stats.contextWindow) * 100 : 0;
+  const color = pct >= 85 ? Colors.Red : pct >= 60 ? Colors.Yellow : Colors.Green;
+  const bars = Math.min(10, Math.round(pct / 10));
+  const meter = "▰".repeat(bars) + "▱".repeat(10 - bars);
+  const context =
+    stats.contextWindow > 0
+      ? `${meter} ${pct.toFixed(0)}%\n${fmtTokens(stats.contextTokens)} / ${fmtTokens(stats.contextWindow)} tokens`
+      : "—";
+  return new EmbedBuilder()
+    .setColor(color)
+    .setTitle("📊 Session info")
+    .addFields(
+      { name: "Model", value: stats.model ?? "default", inline: true },
+      { name: "Cost", value: fmtCost(stats.totalCostUsd), inline: true },
+      { name: "Turns", value: String(stats.userTurns), inline: true },
+      { name: "Context", value: context, inline: true },
+      { name: "Time working", value: fmtDuration(stats.wallMs), inline: true },
+      { name: "Session age", value: formatUptime((Date.now() - stats.startedAt) / 1000), inline: true },
+    )
+    .setFooter({ text: "updates after each turn" })
+    .setTimestamp();
+}
