@@ -142,7 +142,12 @@ export class Claudecord {
         `exec zsh -ic 'claude --resume "${record.sdkSessionId}"'\n`,
     );
     chmodSync(file, 0o755);
-    spawn("open", [file], { detached: true, stdio: "ignore" }).unref();
+    if (this.settings.terminal === "Ghostty") {
+      // Ghostty takes the command to run via --args -e; a new instance = a new window.
+      spawn("open", ["-na", "Ghostty", "--args", "-e", file], { detached: true, stdio: "ignore" }).unref();
+    } else {
+      spawn("open", ["-a", this.settings.terminal, file], { detached: true, stdio: "ignore" }).unref();
+    }
   }
 
   private async buildContent(message: Message): Promise<UserContent> {

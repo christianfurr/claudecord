@@ -1,0 +1,24 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="claudecord logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1e1b2e"/>
+      <stop offset="1" stop-color="#2b2440"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="160" y1="140" x2="360" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d97757"/>
+      <stop offset="1" stop-color="#8b7cf6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- speech bubble -->
+  <rect x="112" y="104" width="288" height="246" rx="46" fill="#f4f1ea"/>
+  <path d="M166 320 L166 402 Q166 420 181 408 L252 350 L166 330 Z" fill="#f4f1ea"/>
+
+  <!-- spark inside the bubble -->
+  <path d="M256 128 l26 72 72 27 -72 27 -26 72 -26 -72 -72 -27 72 -27 z" fill="url(#spark)"/>
+  <circle cx="352" cy="150" r="11" fill="url(#spark)"/>
+  <circle cx="162" cy="308" r="8" fill="url(#spark)"/>
+</svg>

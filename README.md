@@ -162,7 +162,8 @@ Settings live in `~/.claudecord/config.json` (created by `/setup`):
   "tagActiveId": "…",           // set by /setup
   "tagDoneId": "…",             // set by /setup
   "workDir": "/Users/you/Code", // directory Claude sessions operate in
-  "model": "claude-opus-4-8"    // optional — omit to use your Claude Code default
+  "model": "claude-opus-4-8",   // optional — omit to use your Claude Code default
+  "terminal": "Ghostty"         // app /open uses ("Ghostty", "Terminal", …)
 }
 ```
 

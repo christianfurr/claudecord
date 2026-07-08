@@ -14,6 +14,8 @@ const settingsSchema = z.object({
   tagDoneId: z.string().optional(),
   workDir: z.string().default(join(homedir(), "Code")),
   model: z.string().optional(),
+  /** App used by /open. "Ghostty" or "Terminal" (or any app that can run a .command file). */
+  terminal: z.string().default("Ghostty"),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
