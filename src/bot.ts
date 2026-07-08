@@ -41,6 +41,14 @@ export class Claudecord {
     saveSettings(this.settings);
   }
 
+  isOwner(userId: string): boolean {
+    return this.settings.ownerId === userId;
+  }
+
+  isAllowed(userId: string): boolean {
+    return this.isOwner(userId) || this.settings.allowlist.includes(userId);
+  }
+
   isSessionThread(thread: AnyThreadChannel): boolean {
     return (
       this.settings.forumChannelId !== undefined &&
@@ -61,6 +69,10 @@ export class Claudecord {
     const thread = message.channel;
     if (!this.isSessionThread(thread)) return;
     if (message.content.startsWith("/")) return; // slash commands come via interactions
+    if (!this.isAllowed(message.author.id)) {
+      await message.react("🔒").catch(() => undefined);
+      return;
+    }
 
     let record = this.registry.get(thread.id);
     if (!record) record = this.registry.create(thread.id, thread.name);

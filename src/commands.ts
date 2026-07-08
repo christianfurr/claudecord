@@ -15,6 +15,16 @@ export const commandDefinitions = [
     .setDescription("Create the claude-sessions forum channel and wire claudecord to it")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
   new SlashCommandBuilder()
+    .setName("allow")
+    .setDescription("Manage who can use claudecord (owner only)")
+    .addUserOption((opt) => opt.setName("user").setDescription("The user to allow or remove").setRequired(true))
+    .addStringOption((opt) =>
+      opt
+        .setName("action")
+        .setDescription("Add (default) or remove")
+        .addChoices({ name: "add", value: "add" }, { name: "remove", value: "remove" }),
+    ),
+  new SlashCommandBuilder()
     .setName("new")
     .setDescription("Start a new Claude session — creates a titled post and sends your prompt")
     .addStringOption((opt) =>
@@ -60,9 +70,20 @@ export const commandDefinitions = [
 ].map((builder) => builder.toJSON());
 
 export async function handleCommand(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  // /setup bootstraps ownership when no owner exists yet; everything else is gated.
+  const bootstrapping = interaction.commandName === "setup" && !app.settings.ownerId;
+  if (!bootstrapping && !app.isAllowed(interaction.user.id)) {
+    await interaction.reply({
+      content: "🔒 You're not on this bot's allowlist. Ask the owner to run `/allow` for you.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
   switch (interaction.commandName) {
     case "setup":
       return handleSetup(app, interaction);
+    case "allow":
+      return handleAllow(app, interaction);
     case "new":
       return handleNew(app, interaction);
     case "status":
@@ -88,6 +109,10 @@ async function handleSetup(app: Claudecord, interaction: ChatInputCommandInterac
     return;
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  if (!app.settings.ownerId) {
+    // First /setup claims ownership — changeable later only via `claudecord owner <id>`.
+    app.updateSettings({ ownerId: interaction.user.id });
+  }
   try {
     const forum = await interaction.guild.channels.create({
       name: "claude-sessions",
@@ -113,6 +138,32 @@ async function handleSetup(app: Claudecord, interaction: ChatInputCommandInterac
     await interaction.editReply({
       embeds: [errorEmbed(`Setup failed (does the bot have Manage Channels?): ${String(err)}`)],
     });
+  }
+}
+
+async function handleAllow(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!app.isOwner(interaction.user.id)) {
+    await interaction.reply({
+      content: "🔒 Only the bot owner can manage the allowlist.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const user = interaction.options.getUser("user", true);
+  const action = interaction.options.getString("action") ?? "add";
+  const allowlist = new Set(app.settings.allowlist);
+  if (action === "add") {
+    if (user.bot) {
+      await interaction.reply({ content: "Bots can't be allowlisted.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    allowlist.add(user.id);
+    app.updateSettings({ allowlist: [...allowlist] });
+    await interaction.reply(`✅ <@${user.id}> can now use claudecord.`);
+  } else {
+    allowlist.delete(user.id);
+    app.updateSettings({ allowlist: [...allowlist] });
+    await interaction.reply(`🚫 <@${user.id}> removed from the allowlist.`);
   }
 }
 

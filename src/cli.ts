@@ -10,6 +10,7 @@
  *   claudecord status      daemon state, pid, sessions, recent log
  *   claudecord logs        tail the logs (-f)
  *   claudecord run         run in the foreground (no daemon)
+ *   claudecord owner [id]  show or set the master user (Discord user id)
  */
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
@@ -167,6 +168,21 @@ function logs(): void {
   spawnSync("tail", ["-n", "50", "-f", OUT_LOG, ERR_LOG], { stdio: "inherit" });
 }
 
+async function owner(id?: string): Promise<void> {
+  const { loadSettings, saveSettings } = await import("./config.js");
+  const settings = loadSettings();
+  if (!id) {
+    console.log(settings.ownerId ? `owner: ${settings.ownerId}` : "no owner set — run: claudecord owner <discord-user-id>");
+    return;
+  }
+  if (!/^\d{15,21}$/.test(id)) {
+    console.error("that doesn't look like a Discord user id (15–21 digits)");
+    process.exit(1);
+  }
+  saveSettings({ ...settings, ownerId: id });
+  console.log(`owner set to ${id} — restart the daemon to apply: claudecord restart`);
+}
+
 const command = process.argv[2];
 switch (command) {
   case "install":
@@ -193,9 +209,12 @@ switch (command) {
   case "run":
     await import("./index.js");
     break;
+  case "owner":
+    await owner(process.argv[3]);
+    break;
   default:
     console.log(
-      "claudecord <install|uninstall|start|stop|restart|status|logs|run>",
+      "claudecord <install|uninstall|start|stop|restart|status|logs|run|owner>",
     );
     process.exit(command ? 1 : 0);
 }

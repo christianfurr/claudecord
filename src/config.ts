@@ -16,6 +16,13 @@ const settingsSchema = z.object({
   model: z.string().optional(),
   /** App used by /open. "Ghostty" or "Terminal" (or any app that can run a .command file). */
   terminal: z.string().default("Ghostty"),
+  /**
+   * Master user (Discord user id). Only configurable via `claudecord owner <id>`
+   * or claimed by whoever runs /setup first — never via a Discord command.
+   */
+  ownerId: z.string().optional(),
+  /** Additional Discord user ids allowed to use the bot (managed by the owner via /allow). */
+  allowlist: z.array(z.string()).default([]),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;

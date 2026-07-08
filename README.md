@@ -95,6 +95,7 @@ Prefer to run it in the foreground instead of as a daemon? `bun start` (or
 | `claudecord start` / `stop` / `restart` | Control the daemon |
 | `claudecord logs` | Tail the logs (`~/.claudecord/logs/`) |
 | `claudecord run` | Run in the foreground (no daemon) |
+| `claudecord owner [id]` | Show or set the master user — the only way to change ownership |
 | `claudecord uninstall` | Remove the daemon (repo and config untouched) |
 
 ### Menu bar (optional)
@@ -147,7 +148,8 @@ it remembers everything. Sessions survive bot restarts and can be picked up days
 
 | Command | Where | What it does |
 |---|---|---|
-| `/setup` | anywhere | One-time: creates the forum + tags and saves the config |
+| `/setup` | anywhere | One-time: creates the forum + tags, saves the config, and claims bot ownership |
+| `/allow user: [action:]` | anywhere | Owner only: add/remove someone from the allowlist |
 | `/new prompt: [title:]` | anywhere | Start a session without leaving the keyboard — creates the titled post and sends the prompt |
 | `/status` | anywhere | Every session with live/working/dormant state, uptime, model |
 | `/open` | in a post | Pop the session open in Ghostty on the host Mac (`claude --resume`) |
@@ -174,12 +176,21 @@ Settings live in `~/.claudecord/config.json` (created by `/setup`):
 The session registry (session numbers, SDK session ids, status) is in
 `~/.claudecord/sessions.json`.
 
+### Access control
+
+Only the **owner** and allowlisted users can talk to the bot — everyone else's
+messages get a 🔒 and are ignored.
+
+- The owner is whoever runs `/setup` first, and can only be changed from the host
+  machine: `claudecord owner <discord-user-id>`. No Discord command can take it.
+- The owner grants access with `/allow user:@friend` (and revokes with
+  `action: remove`). The allowlist lives in `~/.claudecord/config.json`.
+
 > [!WARNING]
 > Sessions run with **permissions bypassed** — the SDK equivalent of
 > `claude --dangerously-skip-permissions`. Claude can read, write, and execute
-> anything your user account can, steered by whoever can post in the forum.
-> Run this only in a private server where every member is someone you'd hand
-> your laptop to.
+> anything your user account can, steered by anyone you allowlist. Only allow
+> people you'd hand your laptop to.
 
 ## How it works
 
