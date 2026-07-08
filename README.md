@@ -67,7 +67,7 @@ CLI is logged in — claudecord rides your existing Claude subscription. (Altern
 set `ANTHROPIC_API_KEY`.)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/claudecord.git
+git clone https://github.com/christianfurr/claudecord.git
 cd claudecord
 npm install
 
