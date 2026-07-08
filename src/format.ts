@@ -1,5 +1,6 @@
 import { EmbedBuilder, Colors } from "discord.js";
 import type { SessionRecord } from "./registry.js";
+import type { SessionSummary } from "./sessions.js";
 
 const DISCORD_MESSAGE_LIMIT = 2000;
 
@@ -112,6 +113,20 @@ export function statusEmbed(
       { name: "Uptime", value: formatUptime(meta.uptimeSec), inline: true },
     )
     .setTimestamp();
+}
+
+export function sessionListEmbed(list: SessionSummary[]): EmbedBuilder {
+  const lines = list.length
+    ? list
+        .map((s) => {
+          const state =
+            s.status === "ended" ? "✅ ended" : s.busy ? "⚙️ working" : s.live ? "🟢 idle" : "💤 dormant";
+          const age = s.ageSec >= 3600 ? `${Math.floor(s.ageSec / 3600)}h` : `${Math.floor(s.ageSec / 60)}m`;
+          return `**#${s.num}** ${state} · $${s.costUsd.toFixed(2)} · ${age} — ${s.title}`;
+        })
+        .join("\n")
+    : "_No sessions yet._";
+  return new EmbedBuilder().setColor(Colors.Green).setTitle("Sessions").setDescription(lines).setTimestamp();
 }
 
 function formatUptime(sec: number): string {

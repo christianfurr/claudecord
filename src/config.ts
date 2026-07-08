@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { z } from "zod";
 // No dotenv needed — Bun loads .env automatically.
 
-export const CONFIG_DIR = join(homedir(), ".claudecord");
+export const CONFIG_DIR = process.env.CLAUDECORD_HOME ?? join(homedir(), ".claudecord");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 
 // Mutable settings written by /setup and editable by hand.

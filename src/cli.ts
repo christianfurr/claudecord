@@ -11,14 +11,30 @@
  *   claudecord logs        tail the logs (-f)
  *   claudecord run         run in the foreground (no daemon)
  *   claudecord owner [id]  show or set the master user (Discord user id)
+ *   claudecord sessions    list all sessions (status, cost, age)
+ *   claudecord end <n>     end session n gracefully (--all ends every active session)
+ *   claudecord kill <n>    force-end session n immediately (requires the daemon)
+ *   claudecord prune       delete ended sessions from the registry
  */
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Registry } from "./registry.js";
+import {
+  listSessions,
+  endSession,
+  endAll,
+  pruneEnded,
+  type SessionServiceHost,
+  type SessionSummary,
+  type EndResult,
+} from "./sessions.js";
 
 const LABEL = "com.christianfurr.claudecord";
+const CONTROL_SOCKET = join(homedir(), ".claudecord", "control.sock");
 const REPO = dirname(dirname(fileURLToPath(import.meta.url))); // src/.. = repo root
 const PLIST = join(homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
 const LOG_DIR = join(homedir(), ".claudecord", "logs");
@@ -183,38 +199,166 @@ async function owner(id?: string): Promise<void> {
   console.log(`owner set to ${id} — restart the daemon to apply: claudecord restart`);
 }
 
-const command = process.argv[2];
-switch (command) {
-  case "install":
-    install();
-    break;
-  case "uninstall":
-    uninstall();
-    break;
-  case "start":
-    start();
-    break;
-  case "stop":
-    stop();
-    break;
-  case "restart":
-    restart();
-    break;
-  case "status":
-    status();
-    break;
-  case "logs":
-    logs();
-    break;
-  case "run":
-    await import("./index.js");
-    break;
-  case "owner":
-    await owner(process.argv[3]);
-    break;
-  default:
-    console.log(
-      "claudecord <install|uninstall|start|stop|restart|status|logs|run|owner>",
-    );
-    process.exit(command ? 1 : 0);
+function sendControl(cmd: string, args?: object): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+  return new Promise((resolve, reject) => {
+    const sock = createConnection(CONTROL_SOCKET);
+    let buf = "";
+    const timer = setTimeout(() => {
+      sock.destroy();
+      reject(new Error("control socket timed out"));
+    }, 5000);
+    sock.on("connect", () => sock.write(JSON.stringify({ cmd, args }) + "\n"));
+    sock.on("data", (d) => {
+      buf += d.toString();
+      if (buf.includes("\n")) {
+        clearTimeout(timer);
+        sock.end();
+        try {
+          resolve(JSON.parse(buf.trim()));
+        } catch (e) {
+          reject(e);
+        }
+      }
+    });
+    sock.on("error", (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+  });
+}
+
+function isDaemonDown(err: unknown): boolean {
+  const code = (err as { code?: string }).code;
+  return code === "ENOENT" || code === "ECONNREFUSED";
+}
+
+export function offlineHost(): SessionServiceHost {
+  return {
+    registry: new Registry(),
+    runtimeInfo: () => undefined,
+    dropRuntime: async () => undefined,
+    archiveSession: async () => undefined,
+  };
+}
+
+function fmtAge(sec: number): string {
+  return sec >= 3600 ? `${Math.floor(sec / 3600)}h` : `${Math.floor(sec / 60)}m`;
+}
+
+function printSessions(list: SessionSummary[]): void {
+  if (list.length === 0) return console.log("no sessions");
+  for (const s of list) {
+    const state = s.status === "ended" ? "ended" : s.busy ? "working" : s.live ? "idle" : "dormant";
+    console.log(`#${s.num}\t${state}\t$${s.costUsd.toFixed(2)}\t${fmtAge(s.ageSec)}\t${s.title}`);
+  }
+}
+
+function printEnd(r: EndResult): void {
+  if (r.error) console.log(`#${r.num}: ${r.error}`);
+  else console.log(`#${r.num}: ended${r.forced ? " (forced)" : ""}`);
+}
+
+async function cmdSessions(): Promise<void> {
+  try {
+    const res = await sendControl("list");
+    printSessions((res.data as SessionSummary[]) ?? []);
+  } catch (err) {
+    if (!isDaemonDown(err)) throw err;
+    printSessions(listSessions(offlineHost()));
+  }
+}
+
+async function cmdEnd(num: number): Promise<void> {
+  try {
+    const res = await sendControl("end", { num });
+    printEnd(res.data as EndResult);
+  } catch (err) {
+    if (!isDaemonDown(err)) throw err;
+    printEnd(await endSession(offlineHost(), num));
+    console.log("(daemon down — Discord thread not archived)");
+  }
+}
+
+async function cmdEndAll(): Promise<void> {
+  try {
+    const res = await sendControl("endAll");
+    (res.data as EndResult[]).forEach(printEnd);
+  } catch (err) {
+    if (!isDaemonDown(err)) throw err;
+    (await endAll(offlineHost())).forEach(printEnd);
+    console.log("(daemon down — Discord threads not archived)");
+  }
+}
+
+async function cmdKill(num: number): Promise<void> {
+  try {
+    const res = await sendControl("kill", { num });
+    printEnd(res.data as EndResult);
+  } catch (err) {
+    if (!isDaemonDown(err)) throw err;
+    console.error("daemon not running — nothing to kill");
+    process.exit(1);
+  }
+}
+
+async function cmdPrune(): Promise<void> {
+  try {
+    const res = await sendControl("prune");
+    console.log(`pruned ${(res.data as { removed: number }).removed} ended session(s)`);
+  } catch (err) {
+    if (!isDaemonDown(err)) throw err;
+    console.log(`pruned ${pruneEnded(offlineHost()).removed} ended session(s)`);
+  }
+}
+
+// Only dispatch when run as a binary; importing (e.g. in tests) must be side-effect-free.
+if (import.meta.main) {
+  const command = process.argv[2];
+  switch (command) {
+    case "install":
+      install();
+      break;
+    case "uninstall":
+      uninstall();
+      break;
+    case "start":
+      start();
+      break;
+    case "stop":
+      stop();
+      break;
+    case "restart":
+      restart();
+      break;
+    case "status":
+      status();
+      break;
+    case "logs":
+      logs();
+      break;
+    case "run":
+      await import("./index.js");
+      break;
+    case "owner":
+      await owner(process.argv[3]);
+      break;
+    case "sessions":
+      await cmdSessions();
+      break;
+    case "end":
+      if (process.argv[3] === "--all") await cmdEndAll();
+      else await cmdEnd(Number(process.argv[3]));
+      break;
+    case "kill":
+      await cmdKill(Number(process.argv[3]));
+      break;
+    case "prune":
+      await cmdPrune();
+      break;
+    default:
+      console.log(
+        "claudecord <install|uninstall|start|stop|restart|status|logs|run|owner|sessions|end|kill|prune>",
+      );
+      process.exit(command ? 1 : 0);
+  }
 }

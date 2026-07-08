@@ -7,7 +7,8 @@ import {
   type AnyThreadChannel,
 } from "discord.js";
 import type { Claudecord } from "./bot.js";
-import { endedEmbed, errorEmbed, statusEmbed } from "./format.js";
+import { endedEmbed, errorEmbed, statusEmbed, sessionListEmbed } from "./format.js";
+import { listSessions, endSession, endAll, killSession } from "./sessions.js";
 
 export const commandDefinitions = [
   new SlashCommandBuilder()
@@ -67,6 +68,9 @@ export const commandDefinitions = [
     .addStringOption((opt) =>
       opt.setName("title").setDescription("New title").setRequired(true).setMaxLength(100),
     ),
+  new SlashCommandBuilder().setName("sessions").setDescription("List all Claude sessions with status, cost, and age"),
+  new SlashCommandBuilder().setName("end-all").setDescription("End every active session (owner only)"),
+  new SlashCommandBuilder().setName("kill").setDescription("Force-end this session immediately, even mid-turn"),
 ].map((builder) => builder.toJSON());
 
 export async function handleCommand(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
@@ -98,6 +102,12 @@ export async function handleCommand(app: Claudecord, interaction: ChatInputComma
       return handleModel(app, interaction);
     case "rename":
       return handleRename(app, interaction);
+    case "sessions":
+      return handleSessions(app, interaction);
+    case "end-all":
+      return handleEndAll(app, interaction);
+    case "kill":
+      return handleKill(app, interaction);
     default:
       await interaction.reply({ content: "Unknown command.", flags: MessageFlags.Ephemeral });
   }
@@ -232,11 +242,41 @@ async function handleEnd(app: Claudecord, interaction: ChatInputCommandInteracti
     return;
   }
   await interaction.deferReply();
-  await app.dropRuntime(thread.id);
-  const updated = app.registry.update(thread.id, { status: "ended" });
-  await app.applyTag(thread, "done");
-  await interaction.editReply({ embeds: [endedEmbed(updated)] });
-  await thread.setArchived(true).catch(() => undefined);
+  const res = await endSession(app, record.sessionNum);
+  if (res.error) {
+    await interaction.editReply({ embeds: [errorEmbed(res.error)] });
+    return;
+  }
+  await interaction.editReply({ embeds: [endedEmbed(app.registry.get(thread.id)!)] });
+}
+
+async function handleSessions(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.reply({ embeds: [sessionListEmbed(listSessions(app))] });
+}
+
+async function handleEndAll(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!app.isOwner(interaction.user.id)) {
+    await interaction.reply({ content: "Owner only.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+  await interaction.deferReply();
+  const results = await endAll(app);
+  const summary = results.length
+    ? results.map((r) => `#${r.num}: ${r.error ?? (r.forced ? "ended (forced)" : "ended")}`).join("\n")
+    : "No active sessions.";
+  await interaction.editReply(summary);
+}
+
+async function handleKill(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  const thread = sessionThread(app, interaction);
+  const record = thread && app.registry.get(thread.id);
+  if (!thread || !record) {
+    await interaction.reply({ content: "Run this inside a session post.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+  await interaction.deferReply();
+  const res = await killSession(app, record.sessionNum);
+  await interaction.editReply(res.error ? `Could not kill: ${res.error}` : `Killed session #${res.num}.`);
 }
 
 async function handleModel(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
