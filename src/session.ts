@@ -3,6 +3,7 @@ import type { AnyThreadChannel, Message } from "discord.js";
 import type { Registry, SessionRecord } from "./registry.js";
 import type { Settings } from "./config.js";
 import { activityLine, chunk, errorEmbed, sessionInfoEmbed, truncate, type SessionStats } from "./format.js";
+import { createDiscordFileServer } from "./send-file.js";
 
 /** Push-based async iterable — the SDK's streaming input reads from this. */
 class AsyncQueue<T> implements AsyncIterable<T> {
@@ -122,9 +123,11 @@ export function buildQueryOptions(
       append:
         `You are connected to Discord through claudecord. This conversation is a Discord ` +
         `forum post titled "${record.title}". Everything you write is delivered to the post ` +
-        `automatically — never try to send Discord messages yourself. Discord renders ` +
-        `markdown but not tables-heavy layouts; keep replies conversational and reasonably ` +
-        `concise. Your tool activity is mirrored to the post as a live feed.`,
+        `automatically. You cannot post messages or embeds yourself, but you CAN attach a ` +
+        `local file to the post by calling the send_file tool (it refuses secret files, paths ` +
+        `outside the home directory, and files over 10 MB). Discord renders markdown but not ` +
+        `tables-heavy layouts; keep replies conversational and reasonably concise. Your tool ` +
+        `activity is mirrored to the post as a live feed.`,
     },
   };
 }
@@ -156,7 +159,12 @@ export class SessionRuntime {
   ) {
     this.feed = new ActivityFeed(thread);
     this.stats.model = record.model ?? settings.model;
-    const options = buildQueryOptions(record, settings, resumeSessionId, forkSession);
+    // buildQueryOptions is pure/testable; mcpServers is thread-specific so it's
+    // added here rather than inside the builder.
+    const options: Options = {
+      ...buildQueryOptions(record, settings, resumeSessionId, forkSession),
+      mcpServers: { discord: createDiscordFileServer(thread) },
+    };
     this.q = query({ prompt: this.queue, options });
     void this.consume();
   }

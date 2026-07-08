@@ -44,13 +44,16 @@ export function activityLine(toolName: string, input: Record<string, unknown>): 
       case "Task":
       case "Agent":
         return String(input.description ?? "");
+      case "mcp__discord__send_file":
+        return basename(String(input.path ?? ""));
       case "TodoWrite":
         return ""; // filtered out by caller
       default:
         return "";
     }
   })();
-  return detail ? `⏺ **${toolName}** · ${truncate(detail, 120)}` : `⏺ **${toolName}**`;
+  const label = toolName === "mcp__discord__send_file" ? "send_file" : toolName;
+  return detail ? `⏺ **${label}** · ${truncate(detail, 120)}` : `⏺ **${label}**`;
 }
 
 function basename(p: string): string {
