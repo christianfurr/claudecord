@@ -339,6 +339,11 @@ if (import.meta.main) {
     case "run":
       await import("./index.js");
       break;
+    case "mcp": {
+      const { startMcpServer } = await import("./mcp.js");
+      await startMcpServer();
+      break;
+    }
     case "owner":
       await owner(process.argv[3]);
       break;
@@ -357,7 +362,7 @@ if (import.meta.main) {
       break;
     default:
       console.log(
-        "claudecord <install|uninstall|start|stop|restart|status|logs|run|owner|sessions|end|kill|prune>",
+        "claudecord <install|uninstall|start|stop|restart|status|logs|run|mcp|owner|sessions|end|kill|prune>",
       );
       process.exit(command ? 1 : 0);
   }
