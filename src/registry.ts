@@ -1,8 +1,10 @@
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { CONFIG_DIR } from "./config.js";
 
-const REGISTRY_FILE = join(CONFIG_DIR, "sessions.json");
+function registryFile(): string {
+  return join(process.env.CLAUDECORD_HOME ?? CONFIG_DIR, "sessions.json");
+}
 
 export interface SessionRecord {
   threadId: string;
@@ -22,23 +24,25 @@ interface RegistryFile {
   sessions: Record<string, SessionRecord>; // keyed by threadId
 }
 
-function load(): RegistryFile {
-  if (!existsSync(REGISTRY_FILE)) return { nextSessionNum: 1, sessions: {} };
-  return JSON.parse(readFileSync(REGISTRY_FILE, "utf8")) as RegistryFile;
+function load(file: string): RegistryFile {
+  if (!existsSync(file)) return { nextSessionNum: 1, sessions: {} };
+  return JSON.parse(readFileSync(file, "utf8")) as RegistryFile;
 }
 
-function save(data: RegistryFile): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
-  const tmp = REGISTRY_FILE + ".tmp";
+function save(file: string, data: RegistryFile): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const tmp = file + ".tmp";
   writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n");
-  renameSync(tmp, REGISTRY_FILE);
+  renameSync(tmp, file);
 }
 
 export class Registry {
+  private readonly file: string;
   private data: RegistryFile;
 
   constructor() {
-    this.data = load();
+    this.file = registryFile();
+    this.data = load(this.file);
   }
 
   create(threadId: string, title: string): SessionRecord {
@@ -52,7 +56,7 @@ export class Registry {
       updatedAt: now,
     };
     this.data.sessions[threadId] = record;
-    save(this.data);
+    save(this.file, this.data);
     return record;
   }
 
@@ -64,11 +68,22 @@ export class Registry {
     const record = this.data.sessions[threadId];
     if (!record) throw new Error(`No session for thread ${threadId}`);
     Object.assign(record, patch, { updatedAt: new Date().toISOString() });
-    save(this.data);
+    save(this.file, this.data);
     return record;
   }
 
   all(): SessionRecord[] {
     return Object.values(this.data.sessions).sort((a, b) => a.sessionNum - b.sessionNum);
+  }
+
+  getByNum(num: number): SessionRecord | undefined {
+    return Object.values(this.data.sessions).find((s) => s.sessionNum === num);
+  }
+
+  remove(threadId: string): boolean {
+    if (!this.data.sessions[threadId]) return false;
+    delete this.data.sessions[threadId];
+    save(this.file, this.data);
+    return true;
   }
 }
