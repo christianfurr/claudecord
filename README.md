@@ -35,6 +35,9 @@ New post → new session. Claude works right in the post — thinking, tool call
   memory intact (sessions resume by SDK session id).
 - 🖼️ **Images** — attach screenshots or photos to any message; they're passed to
   Claude inline.
+- 📎 **Files, both ways** — attach any file (PDF, docx, txt…) and it's saved locally
+  for Claude to read; Claude can send a local file back with the `send_file` tool,
+  which refuses secrets, paths outside your home directory, and files over 10 MB.
 - 📊 **Live session dashboard** — an embed in every post that updates after each
   turn: model, running cost, context meter (▰▰▰▱ %), turns, and time worked.
   `/model` switches models mid-session without losing context.

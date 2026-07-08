@@ -3,6 +3,7 @@ import type { AnyThreadChannel, Message } from "discord.js";
 import type { Registry, SessionRecord } from "./registry.js";
 import type { Settings } from "./config.js";
 import { activityLine, chunk, errorEmbed, sessionInfoEmbed, truncate, type SessionStats } from "./format.js";
+import { createDiscordFileServer } from "./send-file.js";
 
 /** Push-based async iterable — the SDK's streaming input reads from this. */
 class AsyncQueue<T> implements AsyncIterable<T> {
@@ -133,6 +134,7 @@ export class SessionRuntime {
       // carries the legacy tmux-bridge reply rules (dp commands). Claudecord owns
       // message delivery itself, so only user-level settings are loaded.
       settingSources: ["user"],
+      mcpServers: { discord: createDiscordFileServer(thread) },
       ...(model ? { model } : {}),
       ...(resumeSessionId ? { resume: resumeSessionId } : {}),
       systemPrompt: {
@@ -140,10 +142,12 @@ export class SessionRuntime {
         preset: "claude_code",
         append:
           `You are connected to Discord through claudecord. This conversation is a Discord ` +
-        `forum post titled "${record.title}". Everything you write is delivered to the post ` +
-        `automatically — never try to send Discord messages yourself. Discord renders ` +
-          `markdown but not tables-heavy layouts; keep replies conversational and reasonably ` +
-          `concise. Your tool activity is mirrored to the post as a live feed.`,
+          `forum post titled "${record.title}". Everything you write is delivered to the post ` +
+          `automatically. You cannot post messages or embeds yourself, but you CAN attach a ` +
+          `local file to the post by calling the send_file tool (it refuses secret files, paths ` +
+          `outside the home directory, and files over 10 MB). Discord renders markdown but not ` +
+          `tables-heavy layouts; keep replies conversational and reasonably concise. Your tool ` +
+          `activity is mirrored to the post as a live feed.`,
       },
     };
     this.q = query({ prompt: this.queue, options });

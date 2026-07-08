@@ -3,6 +3,7 @@ import {
   Client,
   GatewayIntentBits,
   type AnyThreadChannel,
+  type Attachment,
   type Message,
 } from "discord.js";
 import { spawn } from "node:child_process";
@@ -12,6 +13,7 @@ import { Registry, type SessionRecord } from "./registry.js";
 import { CONFIG_DIR, loadSettings, saveSettings, type Settings } from "./config.js";
 import { SessionRuntime, type UserContent } from "./session.js";
 import { welcomeEmbed, endedEmbed } from "./format.js";
+import { MAX_INBOUND_BYTES, sanitizeFilename } from "./files.js";
 import type { RuntimeInfo, SessionServiceHost } from "./sessions.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -171,10 +173,9 @@ export class Claudecord implements SessionServiceHost {
     for (const attachment of message.attachments.values()) {
       const mediaType = attachment.contentType?.split(";")[0] ?? "";
       if (!IMAGE_TYPES.has(mediaType) || attachment.size > MAX_IMAGE_BYTES) {
-        blocks.push({
-          type: "text",
-          text: `[The user attached a file that couldn't be inlined: ${attachment.name} (${mediaType || "unknown type"}, ${attachment.size} bytes) — ${attachment.url}]`,
-        });
+        // Non-image (or oversized image): save to disk and hand Claude the path
+        // so it can open the file with its Read tool.
+        blocks.push({ type: "text", text: await this.saveAttachment(message.channelId, attachment) });
         continue;
       }
       const res = await fetch(attachment.url);
@@ -187,6 +188,32 @@ export class Claudecord implements SessionServiceHost {
 
     if (blocks.length === 0) blocks.push({ type: "text", text: "(empty message)" });
     return blocks;
+  }
+
+  /**
+   * Download a non-inlineable attachment into the session inbox and return a text
+   * block telling Claude where it landed. Falls back to a URL note if the download
+   * fails or the file is too large, so the turn still proceeds.
+   */
+  private async saveAttachment(threadId: string, attachment: Attachment): Promise<string> {
+    const type = attachment.contentType?.split(";")[0] || "unknown type";
+    if (attachment.size > MAX_INBOUND_BYTES) {
+      return `[The user attached ${attachment.name} (${type}, ${attachment.size} bytes) — too large to download (limit ${MAX_INBOUND_BYTES} bytes). URL: ${attachment.url}]`;
+    }
+    try {
+      const res = await fetch(attachment.url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const dir = join(CONFIG_DIR, "inbox", threadId);
+      mkdirSync(dir, { recursive: true });
+      const name = sanitizeFilename(attachment.name ?? "file");
+      const dest = join(dir, name);
+      writeFileSync(dest, buf);
+      return `[The user attached ${name} (${type}, ${buf.length} bytes) — saved to ${dest}. Use your Read tool to open it.]`;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return `[The user attached ${attachment.name} but it couldn't be downloaded (${msg}). URL: ${attachment.url}]`;
+    }
   }
 
   async applyTag(thread: AnyThreadChannel, tag: "active" | "done"): Promise<void> {
