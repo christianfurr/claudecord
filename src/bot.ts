@@ -5,8 +5,11 @@ import {
   type AnyThreadChannel,
   type Message,
 } from "discord.js";
+import { spawn } from "node:child_process";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { Registry, type SessionRecord } from "./registry.js";
-import { loadSettings, saveSettings, type Settings } from "./config.js";
+import { CONFIG_DIR, loadSettings, saveSettings, type Settings } from "./config.js";
 import { SessionRuntime, type UserContent } from "./session.js";
 import { welcomeEmbed } from "./format.js";
 
@@ -117,6 +120,29 @@ export class Claudecord {
     const runtime = this.ensureRuntime(thread, record);
     runtime.send([{ type: "text", text: prompt }], starter ?? undefined);
     return thread;
+  }
+
+  /**
+   * Open a session in Terminal.app on this machine via `claude --resume`.
+   * A .command file avoids the macOS automation-permission prompt that
+   * scripting Terminal with osascript would trigger.
+   */
+  openInTerminal(record: SessionRecord): void {
+    if (!record.sdkSessionId) {
+      throw new Error("This session hasn't completed a turn yet — nothing to resume.");
+    }
+    const dir = join(CONFIG_DIR, "open");
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, `session-${record.sessionNum}.command`);
+    writeFileSync(
+      file,
+      `#!/bin/zsh\n` +
+        `# claudecord: open session ${record.sessionNum} ("${record.title.replace(/"/g, "'")}")\n` +
+        `cd "${this.settings.workDir}"\n` +
+        `exec zsh -ic 'claude --resume "${record.sdkSessionId}"'\n`,
+    );
+    chmodSync(file, 0o755);
+    spawn("open", [file], { detached: true, stdio: "ignore" }).unref();
   }
 
   private async buildContent(message: Message): Promise<UserContent> {

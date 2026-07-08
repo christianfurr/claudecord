@@ -145,7 +145,9 @@ it remembers everything. Sessions survive bot restarts and can be picked up days
 | Command | Where | What it does |
 |---|---|---|
 | `/setup` | anywhere | One-time: creates the forum + tags and saves the config |
+| `/new prompt: [title:]` | anywhere | Start a session without leaving the keyboard — creates the titled post and sends the prompt |
 | `/status` | anywhere | Every session with live/working/dormant state, uptime, model |
+| `/open` | in a post | Pop the session open in Terminal on the host Mac (`claude --resume`) |
 | `/clear` | in a post | Wipe the session's memory — fresh start, same post |
 | `/end` | in a post | End the session, tag it ✅ Done, archive the post |
 | `/rename title:` | in a post | Rename the post (and the session) |

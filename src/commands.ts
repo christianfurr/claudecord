@@ -33,6 +33,9 @@ export const commandDefinitions = [
     .setName("end")
     .setDescription("End this session and archive the post"),
   new SlashCommandBuilder()
+    .setName("open")
+    .setDescription("Open this session in Terminal on the host Mac (claude --resume)"),
+  new SlashCommandBuilder()
     .setName("rename")
     .setDescription("Rename this session's post")
     .addStringOption((opt) =>
@@ -52,6 +55,8 @@ export async function handleCommand(app: Claudecord, interaction: ChatInputComma
       return handleClear(app, interaction);
     case "end":
       return handleEnd(app, interaction);
+    case "open":
+      return handleOpen(app, interaction);
     case "rename":
       return handleRename(app, interaction);
     default:
@@ -163,6 +168,29 @@ async function handleEnd(app: Claudecord, interaction: ChatInputCommandInteracti
   await app.applyTag(thread, "done");
   await interaction.editReply({ embeds: [endedEmbed(updated)] });
   await thread.setArchived(true).catch(() => undefined);
+}
+
+async function handleOpen(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  const thread = sessionThread(app, interaction);
+  const record = thread && app.registry.get(thread.id);
+  if (!thread || !record) {
+    await interaction.reply({ content: "Run this inside a session post.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+  try {
+    app.openInTerminal(record);
+    await interaction.reply({
+      content:
+        "🖥️ Opened in Terminal on the host Mac (`claude --resume`). Heads up: it's a live " +
+        "fork of this session — turns you take in the terminal won't show up here.",
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (err) {
+    await interaction.reply({
+      content: `❌ ${err instanceof Error ? err.message : String(err)}`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
 }
 
 async function handleRename(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
