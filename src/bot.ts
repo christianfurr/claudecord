@@ -11,12 +11,13 @@ import { join } from "node:path";
 import { Registry, type SessionRecord } from "./registry.js";
 import { CONFIG_DIR, loadSettings, saveSettings, type Settings } from "./config.js";
 import { SessionRuntime, type UserContent } from "./session.js";
-import { welcomeEmbed } from "./format.js";
+import { welcomeEmbed, endedEmbed } from "./format.js";
+import type { RuntimeInfo, SessionServiceHost } from "./sessions.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
-export class Claudecord {
+export class Claudecord implements SessionServiceHost {
   readonly client: Client;
   readonly registry = new Registry();
   readonly runtimes = new Map<string, SessionRuntime>();
@@ -196,6 +197,21 @@ export class Claudecord {
     } catch (err) {
       console.error("failed to apply tag:", err);
     }
+  }
+
+  runtimeInfo(threadId: string): RuntimeInfo | undefined {
+    const rt = this.runtimes.get(threadId);
+    if (!rt) return undefined;
+    return { busy: rt.busy, costUsd: rt.stats.totalCostUsd, turns: rt.stats.userTurns, model: rt.stats.model };
+  }
+
+  async archiveSession(threadId: string, summary?: { turns?: number; costUsd?: number }): Promise<void> {
+    const record = this.registry.get(threadId);
+    const channel = await this.client.channels.fetch(threadId).catch(() => null);
+    if (!channel || !channel.isThread()) return;
+    await this.applyTag(channel, "done");
+    if (record) await channel.send({ embeds: [endedEmbed(record, summary)] }).catch(() => undefined);
+    await channel.setArchived(true).catch(() => undefined);
   }
 
   async shutdown(): Promise<void> {
