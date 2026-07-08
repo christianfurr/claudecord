@@ -158,6 +158,29 @@ it remembers everything. Sessions survive bot restarts and can be picked up days
 | `/end` | in a post | End the session, tag it ✅ Done, archive the post |
 | `/rename title:` | in a post | Rename the post (and the session) |
 
+## Continue a terminal session in Discord
+
+Hand off a Claude Code session running in your terminal to Discord — useful when you
+need to leave your machine mid-task.
+
+**One-time setup** — register claudecord's MCP server so every terminal session can reach it:
+
+```bash
+claude mcp add --scope user claudecord -- claudecord mcp
+```
+
+(If `claudecord` isn't on your `PATH`, use the absolute form:
+`claude mcp add --scope user claudecord -- bun /path/to/claudecord/src/cli.ts mcp`.)
+
+**Usage** — in any terminal `claude` session, ask Claude to hand off (it calls the
+`handoff_to_discord` tool). A new forum post appears in your claudecord channel that
+continues the same conversation. Send a message there to pick up where you left off.
+
+The handoff is a one-way baton pass: it forks a new session id from your terminal
+session's history, so the Discord side and your (now-abandoned) terminal session never
+write to the same file. The bot must be running (`claudecord status`); a handoff fired
+while it's down is processed when it next starts.
+
 ## Configuration
 
 Settings live in `~/.claudecord/config.json` (created by `/setup`):
