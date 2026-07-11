@@ -3,7 +3,7 @@ import type { AnyThreadChannel, Message } from "discord.js";
 import type { Registry, SessionRecord } from "./registry.js";
 import type { Settings } from "./config.js";
 import { activityLine, chunk, errorEmbed, sessionInfoEmbed, truncate, type SessionStats } from "./format.js";
-import { createDiscordFileServer } from "./send-file.js";
+import { createDiscordMcpServer, type ReminderServices } from "./send-file.js";
 
 /** Push-based async iterable — the SDK's streaming input reads from this. */
 class AsyncQueue<T> implements AsyncIterable<T> {
@@ -127,7 +127,15 @@ export function buildQueryOptions(
         `local file to the post by calling the send_file tool (it refuses secret files, paths ` +
         `outside the home directory, and files over 10 MB). Discord renders markdown but not ` +
         `tables-heavy layouts; keep replies conversational and reasonably concise. Your tool ` +
-        `activity is mirrored to the post as a live feed.`,
+        `activity is mirrored to the post as a live feed. ` +
+        `You can get the owner's attention: call ping_me to DM and mention them right now — use it ` +
+        `autonomously when something is genuinely worth interrupting for (you're blocked and need ` +
+        `input, a long task finished, or you hit an error they'd want to know about), not for routine ` +
+        `updates. Call remind_me to schedule a one-shot reminder for later; resolve the time to a ` +
+        `concrete fireAt (ISO 8601 with offset) and an IANA tz, defaulting to the host machine's zone ` +
+        `unless the user names one. A "nudge" reminder just notifies them at that time; a "task" ` +
+        `reminder wakes this session later and hands you the text as a prompt so you can do the thing. ` +
+        `list_reminders and cancel_reminder manage pending ones.`,
     },
   };
 }
@@ -154,6 +162,7 @@ export class SessionRuntime {
     private record: SessionRecord,
     private registry: Registry,
     settings: Settings,
+    services: ReminderServices,
     resumeSessionId?: string,
     forkSession = false,
   ) {
@@ -163,7 +172,7 @@ export class SessionRuntime {
     // added here rather than inside the builder.
     const options: Options = {
       ...buildQueryOptions(record, settings, resumeSessionId, forkSession),
-      mcpServers: { discord: createDiscordFileServer(thread) },
+      mcpServers: { discord: createDiscordMcpServer(thread, services) },
     };
     this.q = query({ prompt: this.queue, options });
     void this.consume();

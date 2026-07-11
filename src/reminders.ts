@@ -52,6 +52,16 @@ interface RemindersFile {
   reminders: Reminder[];
 }
 
+/** One-line human-readable description of a reminder, timed in its own zone. */
+export function formatReminder(r: Reminder): string {
+  const when = new Intl.DateTimeFormat("en-US", {
+    timeZone: r.schedule.tz,
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(r.schedule.fireAt));
+  return `${r.id} · ${when} (${r.schedule.tz}) · ${r.kind} · ${r.text}`;
+}
+
 function load(file: string): RemindersFile {
   if (!existsSync(file)) return { nextId: 1, reminders: [] };
   return JSON.parse(readFileSync(file, "utf8")) as RemindersFile;

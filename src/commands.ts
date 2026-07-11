@@ -9,6 +9,7 @@ import {
 import type { Claudecord } from "./bot.js";
 import { endedEmbed, errorEmbed, statusEmbed, sessionListEmbed } from "./format.js";
 import { listSessions, endSession, endAll, killSession } from "./sessions.js";
+import { formatReminder } from "./reminders.js";
 
 export const commandDefinitions = [
   new SlashCommandBuilder()
@@ -71,6 +72,11 @@ export const commandDefinitions = [
   new SlashCommandBuilder().setName("sessions").setDescription("List all Claude sessions with status, cost, and age"),
   new SlashCommandBuilder().setName("end-all").setDescription("End every active session (owner only)"),
   new SlashCommandBuilder().setName("kill").setDescription("Force-end this session immediately, even mid-turn"),
+  new SlashCommandBuilder().setName("reminders").setDescription("List your pending reminders"),
+  new SlashCommandBuilder()
+    .setName("cancel")
+    .setDescription("Cancel a pending reminder by its id")
+    .addStringOption((opt) => opt.setName("id").setDescription("Reminder id, e.g. r3").setRequired(true)),
 ].map((builder) => builder.toJSON());
 
 export async function handleCommand(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
@@ -108,6 +114,10 @@ export async function handleCommand(app: Claudecord, interaction: ChatInputComma
       return handleEndAll(app, interaction);
     case "kill":
       return handleKill(app, interaction);
+    case "reminders":
+      return handleReminders(app, interaction);
+    case "cancel":
+      return handleCancel(app, interaction);
     default:
       await interaction.reply({ content: "Unknown command.", flags: MessageFlags.Ephemeral });
   }
@@ -319,6 +329,25 @@ async function handleOpen(app: Claudecord, interaction: ChatInputCommandInteract
       flags: MessageFlags.Ephemeral,
     });
   }
+}
+
+async function handleReminders(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  const items = app.reminders.all();
+  if (items.length === 0) {
+    await interaction.reply({ content: "No reminders scheduled.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const body = items.map((r) => `\`${r.id}\`${formatReminder(r).slice(r.id.length)}`).join("\n");
+  await interaction.reply({ content: body.slice(0, 1900), flags: MessageFlags.Ephemeral });
+}
+
+async function handleCancel(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  const id = interaction.options.getString("id", true);
+  const ok = app.reminders.remove(id);
+  await interaction.reply({
+    content: ok ? `🗑️ Canceled reminder \`${id}\`.` : `No reminder with id \`${id}\`.`,
+    flags: MessageFlags.Ephemeral,
+  });
 }
 
 async function handleRename(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {

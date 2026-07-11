@@ -16,6 +16,11 @@ import { welcomeEmbed, endedEmbed } from "./format.js";
 import { readHandoff, quarantineHandoff, HANDOFF_DIR, type HandoffRequest } from "./handoffs.js";
 import { MAX_INBOUND_BYTES, sanitizeFilename } from "./files.js";
 import type { RuntimeInfo, SessionServiceHost } from "./sessions.js";
+import { ReminderStore, type Reminder } from "./reminders.js";
+import { Scheduler } from "./scheduler.js";
+import { dmOwner, postToThread } from "./notify.js";
+import { dispatchReminder } from "./fire.js";
+import type { ReminderServices } from "./send-file.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -24,6 +29,8 @@ export class Claudecord implements SessionServiceHost {
   readonly client: Client;
   readonly registry = new Registry();
   readonly runtimes = new Map<string, SessionRuntime>();
+  readonly reminders = new ReminderStore();
+  private scheduler: Scheduler | undefined;
   settings: Settings;
   readonly startedAt = Date.now();
 
@@ -104,11 +111,82 @@ export class Claudecord implements SessionServiceHost {
       record,
       this.registry,
       this.settings,
+      this.reminderServices(thread, record),
       opts.fresh ? undefined : record.sdkSessionId,
       opts.forkSession ?? false,
     );
     this.runtimes.set(thread.id, runtime);
     return runtime;
+  }
+
+  /**
+   * Per-session reminder/ping surface handed to the MCP tools. Closes over the
+   * thread + record so `remind_me` captures the origin session (for `task`
+   * reminders) and `ping_me` lands in the right post. The store and client stay
+   * hidden behind this narrow interface.
+   */
+  private reminderServices(thread: AnyThreadChannel, record: SessionRecord): ReminderServices {
+    return {
+      ownerId: this.settings.ownerId,
+      schedule: (args) =>
+        this.reminders.add({
+          threadId: thread.id,
+          sdkSessionId: this.registry.get(thread.id)?.sdkSessionId ?? record.sdkSessionId,
+          cwd: record.cwd,
+          ...args,
+        }),
+      list: () => this.reminders.all(),
+      cancel: (id) => this.reminders.remove(id),
+      pingOwner: (text) => this.pingOwner(thread.id, text),
+    };
+  }
+
+  /** Start the reminder scheduler. Called once the client is ready. */
+  startScheduler(): void {
+    if (this.scheduler) return;
+    this.scheduler = new Scheduler(this.reminders, (r) => this.fireReminder(r));
+    this.scheduler.start();
+  }
+
+  /** DM the owner and post a mentioning line in a thread — the shared ping path. */
+  private async pingOwner(threadId: string, text: string): Promise<void> {
+    await Promise.allSettled([
+      dmOwner(this.client, this.settings.ownerId, text),
+      postToThread(this.client, threadId, text, this.settings.ownerId),
+    ]);
+  }
+
+  /** Fire a due reminder. Branching logic lives in the pure `dispatchReminder`. */
+  private fireReminder(reminder: Reminder): Promise<void> {
+    return dispatchReminder(reminder, {
+      markFired: (id) => this.reminders.markFired(id),
+      nudge: (threadId, text) => this.fireNudge(threadId, text),
+      wakeSession: (r) => this.wakeSession(r),
+    });
+  }
+
+  /**
+   * Resume the origin session for a `task` reminder and inject its text as a
+   * prompt. Returns false if the session's thread/record is gone, so the caller
+   * can degrade to a nudge.
+   */
+  private async wakeSession(reminder: Reminder): Promise<boolean> {
+    const record = this.registry.get(reminder.threadId);
+    const channel = await this.client.channels.fetch(reminder.threadId).catch(() => null);
+    if (!record || !channel || !channel.isThread()) return false;
+    await dmOwner(this.client, this.settings.ownerId, `⏰ starting: ${reminder.text}`);
+    if (channel.archived) await channel.setArchived(false).catch(() => undefined);
+    const runtime = this.ensureRuntime(channel, record);
+    runtime.send([{ type: "text", text: reminder.text }]);
+    return true;
+  }
+
+  private async fireNudge(threadId: string, text: string): Promise<void> {
+    const line = `⏰ ${text}`;
+    await Promise.allSettled([
+      dmOwner(this.client, this.settings.ownerId, line),
+      postToThread(this.client, threadId, line, this.settings.ownerId),
+    ]);
   }
 
   async dropRuntime(threadId: string): Promise<void> {
@@ -307,6 +385,7 @@ export class Claudecord implements SessionServiceHost {
   }
 
   async shutdown(): Promise<void> {
+    this.scheduler?.stop();
     await Promise.allSettled([...this.runtimes.values()].map((r) => r.dispose()));
     await this.client.destroy();
   }
