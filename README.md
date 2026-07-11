@@ -46,6 +46,14 @@ New post → new session. Claude works right in the post — thinking, tool call
   session id and opens a new post that continues the same conversation, so you can
   walk away from your machine and keep going from your phone. See
   [Continue a terminal session in Discord](#continue-a-terminal-session-in-discord).
+- 🔔 **Pings & reminders** — Claude can get your attention when it matters. It
+  DMs you and mentions you in the post the moment it's blocked, done, or hit
+  something you'd want to know (`ping_me`), and it can schedule one-shot
+  reminders (`remind_me`) that fire later even if the session is idle or the
+  daemon restarted. A reminder either just nudges you or wakes the session to
+  actually do the thing and report back. Manage them with `/reminders` and
+  `/cancel`. Times are stored with their timezone, so flipping your system clock
+  doesn't move when a reminder fires.
 - 🪶 **One process** — discord.js + the Claude Agent SDK. No tmux, no HTTP relay,
   no shell hooks, nothing to babysit.
 
@@ -165,6 +173,8 @@ it remembers everything. Sessions survive bot restarts and can be picked up days
 | `/clear` | in a post | Wipe the session's memory — fresh start, same post |
 | `/end` | in a post | End the session, tag it ✅ Done, archive the post |
 | `/rename title:` | in a post | Rename the post (and the session) |
+| `/reminders` | anywhere | List your pending reminders (id, when, timezone, kind) |
+| `/cancel id:` | anywhere | Cancel a pending reminder by id (e.g. `r3`) |
 
 ## Continue a terminal session in Discord
 
