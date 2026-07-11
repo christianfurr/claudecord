@@ -1,0 +1,62 @@
+import { test, expect } from "bun:test";
+import type { Client } from "discord.js";
+import { mentionPayload, dmOwner, postToThread } from "./notify.js";
+
+test("mentionPayload without a user is a plain post", () => {
+  expect(mentionPayload("hello")).toEqual({ content: "hello" });
+});
+
+test("mentionPayload pings only the given user", () => {
+  const p = mentionPayload("test the deploy", "owner-1");
+  expect(p.content).toBe("<@owner-1> test the deploy");
+  expect(p.allowedMentions).toEqual({ parse: [], users: ["owner-1"] });
+});
+
+test("dmOwner returns false and sends nothing when no owner is set", async () => {
+  let fetched = false;
+  const client = { users: { fetch: async () => ((fetched = true), {}) } } as unknown as Client;
+  expect(await dmOwner(client, undefined, "hi")).toBe(false);
+  expect(fetched).toBe(false);
+});
+
+test("dmOwner sends a direct message to the owner", async () => {
+  const sent: string[] = [];
+  const client = {
+    users: { fetch: async (id: string) => ({ id, send: async (t: string) => sent.push(t) }) },
+  } as unknown as Client;
+  expect(await dmOwner(client, "owner-1", "⏰ reminder")).toBe(true);
+  expect(sent).toEqual(["⏰ reminder"]);
+});
+
+test("dmOwner swallows failures and reports false", async () => {
+  const client = {
+    users: { fetch: async () => { throw new Error("cannot DM"); } },
+  } as unknown as Client;
+  expect(await dmOwner(client, "owner-1", "hi")).toBe(false);
+});
+
+test("postToThread posts with an owner ping and unarchives first", async () => {
+  const calls: { setArchived?: boolean; send?: unknown } = {};
+  const thread = {
+    isThread: () => true,
+    archived: true,
+    setArchived: async (v: boolean) => { calls.setArchived = v; },
+    send: async (payload: unknown) => { calls.send = payload; },
+  };
+  const client = { channels: { fetch: async () => thread } } as unknown as Client;
+  expect(await postToThread(client, "t-1", "test", "owner-1")).toBe(true);
+  expect(calls.setArchived).toBe(false);
+  expect(calls.send).toEqual({
+    content: "<@owner-1> test",
+    allowedMentions: { parse: [], users: ["owner-1"] },
+  });
+});
+
+test("postToThread returns false for a non-thread or missing channel", async () => {
+  const missing = { channels: { fetch: async () => null } } as unknown as Client;
+  expect(await postToThread(missing, "t-1", "x")).toBe(false);
+  const notThread = {
+    channels: { fetch: async () => ({ isThread: () => false }) },
+  } as unknown as Client;
+  expect(await postToThread(notThread, "t-1", "x")).toBe(false);
+});
