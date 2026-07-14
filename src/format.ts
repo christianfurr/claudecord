@@ -18,6 +18,74 @@ export function chunk(text: string, limit = DISCORD_MESSAGE_LIMIT): string[] {
   return chunks;
 }
 
+/** Split a markdown table row into trimmed cells, dropping the border pipes. */
+function splitRow(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((c) => c.trim());
+}
+
+/** True if a line is a GFM table delimiter row, e.g. `| :--- | ---: |`. */
+function isDelimiterRow(line: string): boolean {
+  if (!line.includes("-")) return false;
+  const cells = splitRow(line);
+  return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c));
+}
+
+/**
+ * Discord renders markdown but NOT tables — raw `| a | b |` shows up unformatted.
+ * Rewrite each GFM table as a monospace-aligned block inside a code fence so the
+ * columns line up. Non-table text passes through untouched.
+ */
+export function tablesToCodeBlocks(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const header = lines[i];
+    const delim = lines[i + 1];
+    const isTableStart =
+      header?.includes("|") && delim !== undefined && isDelimiterRow(delim) && splitRow(header).length > 1;
+    if (!isTableStart) {
+      out.push(header);
+      continue;
+    }
+    const aligns = splitRow(delim).map((c) =>
+      c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "left",
+    );
+    const rows: string[][] = [splitRow(header)];
+    let j = i + 2;
+    while (j < lines.length && lines[j].includes("|") && !isDelimiterRow(lines[j])) {
+      rows.push(splitRow(lines[j]));
+      j++;
+    }
+    const cols = Math.max(...rows.map((r) => r.length));
+    const widths = Array.from({ length: cols }, (_, c) =>
+      Math.max(...rows.map((r) => (r[c] ?? "").length)),
+    );
+    const pad = (val: string, c: number): string => {
+      const w = widths[c];
+      const gap = w - val.length;
+      if (aligns[c] === "right") return " ".repeat(gap) + val;
+      if (aligns[c] === "center") {
+        const left = Math.floor(gap / 2);
+        return " ".repeat(left) + val + " ".repeat(gap - left);
+      }
+      return val + " ".repeat(gap);
+    };
+    const render = (r: string[]): string =>
+      widths.map((_, c) => pad(r[c] ?? "", c)).join("  ").trimEnd();
+    const body = [
+      render(rows[0]),
+      widths.map((w) => "-".repeat(w)).join("  "),
+      ...rows.slice(1).map(render),
+    ].join("\n");
+    out.push("```\n" + body + "\n```");
+    i = j - 1;
+  }
+  return out.join("\n");
+}
+
 export function truncate(text: string, max: number): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length <= max ? oneLine : oneLine.slice(0, max - 1) + "…";

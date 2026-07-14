@@ -2,7 +2,7 @@ import { query, type Query, type Options, type SDKUserMessage } from "@anthropic
 import type { AnyThreadChannel, Message } from "discord.js";
 import type { Registry, SessionRecord } from "./registry.js";
 import type { Settings } from "./config.js";
-import { activityLine, chunk, errorEmbed, sessionInfoEmbed, truncate, type SessionStats } from "./format.js";
+import { activityLine, chunk, errorEmbed, sessionInfoEmbed, tablesToCodeBlocks, truncate, type SessionStats } from "./format.js";
 import { createDiscordMcpServer, type ReminderServices } from "./send-file.js";
 
 /** Push-based async iterable — the SDK's streaming input reads from this. */
@@ -249,7 +249,7 @@ export class SessionRuntime {
               } else if (block.type === "text" && !isSubagent) {
                 const text = block.text.trim();
                 if (text) {
-                  for (const part of chunk(text)) await this.thread.send(part);
+                  for (const part of chunk(tablesToCodeBlocks(text))) await this.thread.send(part);
                 }
               }
             }
