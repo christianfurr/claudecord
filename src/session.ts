@@ -1,8 +1,19 @@
 import { query, type Query, type Options, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AnyThreadChannel, Message } from "discord.js";
+import { AttachmentBuilder, type AnyThreadChannel, type Message } from "discord.js";
 import type { Registry, SessionRecord } from "./registry.js";
 import type { Settings } from "./config.js";
-import { activityLine, chunk, errorEmbed, sessionInfoEmbed, tablesToCodeBlocks, truncate, type SessionStats } from "./format.js";
+import {
+  activityLine,
+  chunk,
+  errorEmbed,
+  sessionInfoEmbed,
+  splitSegments,
+  tableToCodeBlock,
+  truncate,
+  type SessionStats,
+  type Table,
+} from "./format.js";
+import { renderTablePng } from "./render-table.js";
 import { createDiscordMcpServer, type ReminderServices } from "./send-file.js";
 
 /** Push-based async iterable — the SDK's streaming input reads from this. */
@@ -147,6 +158,7 @@ export class SessionRuntime {
   private pendingTurns: PendingTurn[] = [];
   private disposed = false;
   private infoMessage: Message | undefined;
+  private tableRender: Settings["tableRender"];
   busy = false;
   readonly stats: SessionStats = {
     totalCostUsd: 0,
@@ -167,6 +179,7 @@ export class SessionRuntime {
     forkSession = false,
   ) {
     this.feed = new ActivityFeed(thread);
+    this.tableRender = settings.tableRender;
     this.stats.model = record.model ?? settings.model;
     // buildQueryOptions is pure/testable; mcpServers is thread-specific so it's
     // added here rather than inside the builder.
@@ -188,6 +201,48 @@ export class SessionRuntime {
       message: { role: "user", content },
       parent_tool_use_id: null,
     } as SDKUserMessage);
+  }
+
+  /**
+   * Send one assistant text block, lifting GFM tables out of the prose. Discord
+   * can't render tables, so each table is sent as a PNG image (best on mobile)
+   * or, if that's disabled or fails, a monospace code block.
+   */
+  private async sendAssistantText(text: string): Promise<void> {
+    for (const seg of splitSegments(text)) {
+      if (seg.type === "text") {
+        const prose = seg.text.trim();
+        if (prose) for (const part of chunk(prose)) await this.thread.send(part);
+      } else {
+        await this.sendTable(seg);
+      }
+    }
+  }
+
+  private async sendTable(table: Table): Promise<void> {
+    if (this.wantsTableImage()) {
+      try {
+        const png = await renderTablePng(table);
+        await this.thread.send({ files: [new AttachmentBuilder(png, { name: "table.png" })] });
+        return;
+      } catch (err) {
+        console.error("table image render failed — falling back to code block:", err);
+      }
+    }
+    for (const part of chunk(tableToCodeBlock(table))) await this.thread.send(part);
+  }
+
+  /**
+   * Whether to render tables as images. "auto" images only for apparent mobile
+   * users; presence needs the GuildPresences intent, so when it's unavailable we
+   * default to an image (this session's owner is mobile-first).
+   */
+  private wantsTableImage(): boolean {
+    if (this.tableRender === "never") return false;
+    if (this.tableRender === "always") return true;
+    const status = this.pendingTurns[0]?.trigger?.member?.presence?.clientStatus;
+    if (!status) return true;
+    return Boolean(status.mobile) && !status.desktop && !status.web;
   }
 
   /** Switch model mid-session (undefined = back to the Claude Code default). */
@@ -248,9 +303,7 @@ export class SessionRuntime {
                 this.feed.add(isSubagent ? `　↳ ${line}` : line);
               } else if (block.type === "text" && !isSubagent) {
                 const text = block.text.trim();
-                if (text) {
-                  for (const part of chunk(tablesToCodeBlocks(text))) await this.thread.send(part);
-                }
+                if (text) await this.sendAssistantText(text);
               }
             }
             break;

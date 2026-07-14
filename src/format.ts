@@ -33,24 +33,41 @@ function isDelimiterRow(line: string): boolean {
   return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c));
 }
 
+export type Align = "left" | "right" | "center";
+
+/** A parsed GFM table: the header is `rows[0]`, alignment is per-column. */
+export interface Table {
+  rows: string[][];
+  aligns: Align[];
+}
+
+/** A run of prose, or a table lifted out of the surrounding text. */
+export type Segment = { type: "text"; text: string } | ({ type: "table" } & Table);
+
 /**
- * Discord renders markdown but NOT tables — raw `| a | b |` shows up unformatted.
- * Rewrite each GFM table as a monospace-aligned block inside a code fence so the
- * columns line up. Non-table text passes through untouched.
+ * Split assistant text into prose runs and GFM tables. Discord renders markdown
+ * but NOT tables, so callers reformat the table segments (code block or image)
+ * while prose passes through untouched.
  */
-export function tablesToCodeBlocks(text: string): string {
+export function splitSegments(text: string): Segment[] {
   const lines = text.split("\n");
-  const out: string[] = [];
+  const segments: Segment[] = [];
+  let prose: string[] = [];
+  const flushProse = () => {
+    if (prose.length) segments.push({ type: "text", text: prose.join("\n") });
+    prose = [];
+  };
   for (let i = 0; i < lines.length; i++) {
     const header = lines[i];
     const delim = lines[i + 1];
     const isTableStart =
       header?.includes("|") && delim !== undefined && isDelimiterRow(delim) && splitRow(header).length > 1;
     if (!isTableStart) {
-      out.push(header);
+      prose.push(header);
       continue;
     }
-    const aligns = splitRow(delim).map((c) =>
+    flushProse();
+    const aligns: Align[] = splitRow(delim).map((c) =>
       c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "left",
     );
     const rows: string[][] = [splitRow(header)];
@@ -59,31 +76,46 @@ export function tablesToCodeBlocks(text: string): string {
       rows.push(splitRow(lines[j]));
       j++;
     }
-    const cols = Math.max(...rows.map((r) => r.length));
-    const widths = Array.from({ length: cols }, (_, c) =>
-      Math.max(...rows.map((r) => (r[c] ?? "").length)),
-    );
-    const pad = (val: string, c: number): string => {
-      const w = widths[c];
-      const gap = w - val.length;
-      if (aligns[c] === "right") return " ".repeat(gap) + val;
-      if (aligns[c] === "center") {
-        const left = Math.floor(gap / 2);
-        return " ".repeat(left) + val + " ".repeat(gap - left);
-      }
-      return val + " ".repeat(gap);
-    };
-    const render = (r: string[]): string =>
-      widths.map((_, c) => pad(r[c] ?? "", c)).join("  ").trimEnd();
-    const body = [
-      render(rows[0]),
-      widths.map((w) => "-".repeat(w)).join("  "),
-      ...rows.slice(1).map(render),
-    ].join("\n");
-    out.push("```\n" + body + "\n```");
+    segments.push({ type: "table", rows, aligns });
     i = j - 1;
   }
-  return out.join("\n");
+  flushProse();
+  return segments;
+}
+
+/** Monospace-aligned table inside a code fence — the text fallback for Discord. */
+export function tableToCodeBlock({ rows, aligns }: Table): string {
+  const cols = Math.max(...rows.map((r) => r.length));
+  const widths = Array.from({ length: cols }, (_, c) =>
+    Math.max(...rows.map((r) => (r[c] ?? "").length)),
+  );
+  const pad = (val: string, c: number): string => {
+    const w = widths[c];
+    const gap = w - val.length;
+    if (aligns[c] === "right") return " ".repeat(gap) + val;
+    if (aligns[c] === "center") {
+      const left = Math.floor(gap / 2);
+      return " ".repeat(left) + val + " ".repeat(gap - left);
+    }
+    return val + " ".repeat(gap);
+  };
+  const render = (r: string[]): string => widths.map((_, c) => pad(r[c] ?? "", c)).join("  ").trimEnd();
+  const body = [
+    render(rows[0]),
+    widths.map((w) => "-".repeat(w)).join("  "),
+    ...rows.slice(1).map(render),
+  ].join("\n");
+  return "```\n" + body + "\n```";
+}
+
+/**
+ * Discord renders markdown but NOT tables — raw `| a | b |` shows up unformatted.
+ * Rewrite each GFM table as a monospace-aligned code block; prose is untouched.
+ */
+export function tablesToCodeBlocks(text: string): string {
+  return splitSegments(text)
+    .map((seg) => (seg.type === "text" ? seg.text : tableToCodeBlock(seg)))
+    .join("\n");
 }
 
 export function truncate(text: string, max: number): string {

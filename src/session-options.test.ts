@@ -7,6 +7,7 @@ const settings = {
   workDir: "/default/work",
   terminal: "Ghostty",
   allowlist: [],
+  tableRender: "always",
 } as Settings;
 
 function record(patch: Partial<SessionRecord> = {}): SessionRecord {

@@ -23,6 +23,15 @@ const settingsSchema = z.object({
   ownerId: z.string().optional(),
   /** Additional Discord user ids allowed to use the bot (managed by the owner via /allow). */
   allowlist: z.array(z.string()).default([]),
+  /**
+   * How to render markdown tables (Discord can't render them natively):
+   * - "always" (default): send a PNG image — best on mobile.
+   * - "auto": image only when the user appears to be on mobile (needs the
+   *   GuildPresences privileged intent enabled in the Discord Developer Portal;
+   *   falls back to image when presence is unknown).
+   * - "never": monospace code block only.
+   */
+  tableRender: z.enum(["always", "auto", "never"]).default("always"),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;

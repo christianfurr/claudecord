@@ -1,5 +1,28 @@
 import { test, expect } from "bun:test";
-import { activityLine, tablesToCodeBlocks } from "./format.js";
+import { activityLine, splitSegments, tablesToCodeBlocks } from "./format.js";
+
+test("splitSegments lifts a table out of surrounding prose in order", () => {
+  const md = ["Intro line.", "| A | B |", "| - | -: |", "| 1 | 2 |", "Outro line."].join("\n");
+  const segs = splitSegments(md);
+  expect(segs.map((s) => s.type)).toEqual(["text", "table", "text"]);
+  expect(segs[0]).toEqual({ type: "text", text: "Intro line." });
+  expect(segs[2]).toEqual({ type: "text", text: "Outro line." });
+  const table = segs[1];
+  if (table.type !== "table") throw new Error("expected table");
+  expect(table.rows).toEqual([["A", "B"], ["1", "2"]]);
+  expect(table.aligns).toEqual(["left", "right"]);
+});
+
+test("splitSegments returns a single text segment when there is no table", () => {
+  const segs = splitSegments("just prose\nwith a | stray pipe");
+  expect(segs).toEqual([{ type: "text", text: "just prose\nwith a | stray pipe" }]);
+});
+
+test("splitSegments handles two tables separated by a blank line (GFM requires one)", () => {
+  const md = ["| A | B |", "| - | - |", "| 1 | 2 |", "", "| C | D |", "| - | - |", "| 3 | 4 |"].join("\n");
+  const segs = splitSegments(md);
+  expect(segs.map((s) => s.type)).toEqual(["table", "text", "table"]);
+});
 
 test("tablesToCodeBlocks wraps a markdown table in a code fence with aligned columns", () => {
   const md = ["| Name | Age |", "| --- | --- |", "| Bob | 30 |", "| Alexander | 7 |"].join("\n");
