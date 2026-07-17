@@ -146,7 +146,9 @@ export function buildQueryOptions(
         `concrete fireAt (ISO 8601 with offset) and an IANA tz, defaulting to the host machine's zone ` +
         `unless the user names one. A "nudge" reminder just notifies them at that time; a "task" ` +
         `reminder wakes this session later and hands you the text as a prompt so you can do the thing. ` +
-        `list_reminders and cancel_reminder manage pending ones.`,
+        `list_reminders and cancel_reminder manage pending ones. ` +
+        `Call restart to restart the bot on new code after you've edited claudecord's own source and ` +
+        `the user asks for it — it typechecks first and this post resumes automatically once it's back.`,
     },
   };
 }

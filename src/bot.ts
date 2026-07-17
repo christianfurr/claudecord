@@ -150,6 +150,7 @@ export class Claudecord implements SessionServiceHost {
       list: () => this.reminders.all(),
       cancel: (id) => this.reminders.remove(id),
       pingOwner: (text) => this.pingOwner(thread.id, text),
+      restart: () => this.requestRestart({ threadId: thread.id, exitDelayMs: 1500 }),
     };
   }
 
