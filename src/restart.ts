@@ -59,8 +59,12 @@ export function currentSha(repoRoot: string): string {
 
 /**
  * Preflight gate before a restart: run the typecheck and report pass/fail with
- * combined output. Blocking (spawnSync) — a restart is disruptive anyway and the
- * typecheck is ~0.5s. `cmd` is injectable for tests.
+ * combined output. Deliberately blocking (spawnSync) — a restart is disruptive
+ * anyway, but this also freezes the daemon's event loop for every other session
+ * for the duration. Callers assume the typecheck completes in well under a
+ * second: the CLI's control-socket response has a 5s budget, so a slower
+ * typecheck would both stall concurrent sessions and risk a CLI timeout.
+ * `cmd` is injectable for tests.
  */
 export function runPreflight(
   repoRoot: string,

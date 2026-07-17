@@ -300,7 +300,7 @@ async function handleRestart(app: Claudecord, interaction: ChatInputCommandInter
     content: "🔄 Typechecking, then restarting…",
     flags: MessageFlags.Ephemeral,
   });
-  const res = await app.requestRestart({ threadId: thread?.id });
+  const res = await app.requestRestart({ threadId: thread?.id, exitDelayMs: 1500 });
   if (!res.ok) {
     await interaction.editReply(
       `❌ Preflight failed — not restarting:\n\`\`\`\n${res.error?.slice(0, 1800) ?? "typecheck failed"}\n\`\`\``,
