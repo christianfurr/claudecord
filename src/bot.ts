@@ -8,7 +8,8 @@ import {
 } from "discord.js";
 import { spawn } from "node:child_process";
 import { chmodSync, mkdirSync, writeFileSync, readdirSync, unlinkSync, watch } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Registry, type SessionRecord } from "./registry.js";
 import { CONFIG_DIR, loadSettings, saveSettings, type Settings } from "./config.js";
 import { SessionRuntime, type UserContent } from "./session.js";
@@ -21,9 +22,20 @@ import { Scheduler } from "./scheduler.js";
 import { dmOwner, postToThread } from "./notify.js";
 import { dispatchReminder } from "./fire.js";
 import type { ReminderServices } from "./send-file.js";
+import {
+  currentSha,
+  runPreflight,
+  writeRestartMarker,
+  readRestartMarker,
+  clearRestartMarker,
+  type RestartOptions,
+  type RestartResult,
+} from "./restart.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+// src/bot.ts is at <repo>/src/bot.ts, so up two dirs is the repo root.
+const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export class Claudecord implements SessionServiceHost {
   readonly client: Client;
@@ -382,6 +394,50 @@ export class Claudecord implements SessionServiceHost {
     await this.applyTag(channel, "done");
     if (record) await channel.send({ embeds: [endedEmbed(record, summary)] }).catch(() => undefined);
     await channel.setArchived(true).catch(() => undefined);
+  }
+
+  /**
+   * Clean restart shared by /restart, the CLI, and the in-session `restart` tool.
+   * Typecheck-gates (unless skipped), posts a note to the requesting thread, writes
+   * a marker for the boot confirmation, then exits — launchd (KeepAlive) revives the
+   * daemon on the new code. Context survives: sessions resume from sdkSessionId on
+   * their next message. The exit is delayed so the caller's reply/tool result flushes.
+   */
+  async requestRestart(opts: RestartOptions = {}): Promise<RestartResult> {
+    const sha = currentSha(REPO_ROOT);
+    if (!opts.skipPreflight) {
+      const pre = runPreflight(REPO_ROOT);
+      if (!pre.ok) return { ok: false, sha, error: pre.output || "typecheck failed" };
+    }
+    if (opts.threadId) {
+      const channel = await this.client.channels.fetch(opts.threadId).catch(() => null);
+      if (channel?.isThread()) {
+        await channel.send(`🔄 restarting on \`${sha}\`…`).catch(() => undefined);
+      }
+    }
+    try {
+      writeRestartMarker({ threadId: opts.threadId, sha, requestedAt: new Date().toISOString() });
+    } catch (err) {
+      console.error("restart marker write failed:", err); // restart matters more than the confirmation
+    }
+    setTimeout(() => process.exit(0), opts.exitDelayMs ?? 300).unref();
+    return { ok: true, sha };
+  }
+
+  /**
+   * On boot: if a restart marker is present, post a "back online" confirmation to
+   * the thread that requested the restart, then clear it. If the daemon never
+   * reaches here (broken new code), the missing confirmation is the health signal.
+   */
+  async consumeRestartMarker(): Promise<void> {
+    const marker = readRestartMarker();
+    if (!marker) return;
+    clearRestartMarker();
+    if (!marker.threadId) return;
+    const channel = await this.client.channels.fetch(marker.threadId).catch(() => null);
+    if (channel?.isThread()) {
+      await channel.send(`✅ back online — running \`${marker.sha}\``).catch(() => undefined);
+    }
   }
 
   async shutdown(): Promise<void> {

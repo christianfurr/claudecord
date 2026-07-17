@@ -238,6 +238,7 @@ export function offlineHost(): SessionServiceHost {
     runtimeInfo: () => undefined,
     dropRuntime: async () => undefined,
     archiveSession: async () => undefined,
+    requestRestart: async () => ({ ok: false, sha: "unknown", error: "daemon not running" }),
   };
 }
 

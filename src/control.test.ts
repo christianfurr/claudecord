@@ -10,6 +10,7 @@ const { startControlServer, CONTROL_SOCKET } = await import("./control.js");
 
 type Host = import("./sessions.js").SessionServiceHost;
 
+const restartCalls: any[] = [];
 function makeHost(): Host {
   const registry = new Registry();
   return {
@@ -17,6 +18,10 @@ function makeHost(): Host {
     runtimeInfo: () => undefined,
     dropRuntime: async () => {},
     archiveSession: async () => {},
+    requestRestart: async (opts) => {
+      restartCalls.push(opts);
+      return { ok: true, sha: "test-sha" };
+    },
   };
 }
 
@@ -40,6 +45,7 @@ let server: Server;
 let host: Host;
 beforeEach(() => {
   process.env.CLAUDECORD_HOME = mkdtempSync(join(tmpdir(), "cc-ctl-"));
+  restartCalls.length = 0;
   host = makeHost();
   server = startControlServer(host);
 });
