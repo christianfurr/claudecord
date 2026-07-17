@@ -87,3 +87,9 @@ test("malformed JSON returns a structured error, not a crash", async () => {
   });
   expect(res.ok).toBe(false);
 });
+
+test("restart dispatches to the host and reports its result", async () => {
+  const res = await request({ cmd: "restart", args: { force: true } });
+  expect(res).toMatchObject({ ok: true, data: { ok: true, sha: "test-sha" } });
+  expect(restartCalls).toEqual([{ skipPreflight: true, exitDelayMs: 300 }]);
+});
