@@ -34,6 +34,8 @@ app.client.once(Events.ClientReady, async (client) => {
 
   app.startScheduler();
   console.log("reminder scheduler started");
+
+  await app.consumeRestartMarker();
 });
 
 app.client.on(Events.InteractionCreate, (interaction) => {
