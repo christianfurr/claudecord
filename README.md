@@ -13,7 +13,7 @@
 **Turn a Discord forum channel into your Claude Code interface.**<br/>
 New post → new session. Claude works right in the post — thinking, tool calls, and answers streamed live.
 
-[Features](#features) · [Quick start](#quick-start) · [Usage](#usage) · [Commands](#commands) · [Configuration](#configuration) · [How it works](#how-it-works) · [Troubleshooting](#troubleshooting)
+[Features](#features) · [Quick start](#quick-start) · [Usage](#usage) · [Commands](#commands) · [Restart](#restart) · [Configuration](#configuration) · [How it works](#how-it-works) · [Troubleshooting](#troubleshooting)
 
 </div>
 
@@ -173,8 +173,26 @@ it remembers everything. Sessions survive bot restarts and can be picked up days
 | `/clear` | in a post | Wipe the session's memory — fresh start, same post |
 | `/end` | in a post | End the session, tag it ✅ Done, archive the post |
 | `/rename title:` | in a post | Rename the post (and the session) |
+| `/restart` | in a post | Typechecks, then restarts the daemon; the post resumes and confirms when it's back |
 | `/reminders` | anywhere | List your pending reminders (id, when, timezone, kind) |
 | `/cancel id:` | anywhere | Cancel a pending reminder by id (e.g. `r3`) |
+
+## Restart
+
+Three ways to reload claudecord after editing its source, all typechecked before they
+restart anything:
+
+- **`/restart`** (in a post) — typechecks, then restarts; the post resumes automatically
+  with a "✅ back online" confirmation.
+- **`claudecord restart`** (terminal) — same gate; `--force` skips the typecheck. It sends
+  a control-socket command, the daemon self-exits, and launchd (`KeepAlive`) respawns it
+  on the new code.
+- **The `restart` tool** — Claude can call this on itself mid-session after editing
+  claudecord's own source, when you ask it to.
+
+Every surface resumes the conversation automatically — each session's SDK session id is
+persisted and resumed on the next message, so context survives the restart. A failing
+typecheck blocks the restart everywhere except `claudecord restart --force`.
 
 ## Continue a terminal session in Discord
 

@@ -24,6 +24,7 @@ function makeHost() {
     archiveSession: async (id, summary) => {
       archived.push({ threadId: id, summary });
     },
+    requestRestart: async () => ({ ok: true, sha: "test-sha" }),
   };
   return { host, registry, runtimes, dropped, archived };
 }

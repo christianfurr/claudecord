@@ -10,6 +10,7 @@ const { startControlServer, CONTROL_SOCKET } = await import("./control.js");
 
 type Host = import("./sessions.js").SessionServiceHost;
 
+const restartCalls: any[] = [];
 function makeHost(): Host {
   const registry = new Registry();
   return {
@@ -17,6 +18,10 @@ function makeHost(): Host {
     runtimeInfo: () => undefined,
     dropRuntime: async () => {},
     archiveSession: async () => {},
+    requestRestart: async (opts) => {
+      restartCalls.push(opts);
+      return { ok: true, sha: "test-sha" };
+    },
   };
 }
 
@@ -40,6 +45,7 @@ let server: Server;
 let host: Host;
 beforeEach(() => {
   process.env.CLAUDECORD_HOME = mkdtempSync(join(tmpdir(), "cc-ctl-"));
+  restartCalls.length = 0;
   host = makeHost();
   server = startControlServer(host);
 });
@@ -80,4 +86,10 @@ test("malformed JSON returns a structured error, not a crash", async () => {
     sock.on("error", reject);
   });
   expect(res.ok).toBe(false);
+});
+
+test("restart dispatches to the host and reports its result", async () => {
+  const res = await request({ cmd: "restart", args: { force: true } });
+  expect(res).toMatchObject({ ok: true, data: { ok: true, sha: "test-sha" } });
+  expect(restartCalls).toEqual([{ skipPreflight: true, exitDelayMs: 300 }]);
 });

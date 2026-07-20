@@ -1,4 +1,5 @@
 import type { Registry } from "./registry.js";
+import type { RestartOptions, RestartResult } from "./restart.js";
 
 export const END_DRAIN_MS = 30_000;
 const DRAIN_POLL_MS = 100;
@@ -15,6 +16,7 @@ export interface SessionServiceHost {
   runtimeInfo(threadId: string): RuntimeInfo | undefined;
   dropRuntime(threadId: string): Promise<void>;
   archiveSession(threadId: string, summary?: { turns?: number; costUsd?: number }): Promise<void>;
+  requestRestart(opts: RestartOptions): Promise<RestartResult>;
 }
 
 export interface SessionSummary {

@@ -9,7 +9,7 @@ export const CONTROL_SOCKET = join(CONFIG_DIR, "control.sock");
 export async function handleControlCommand(
   host: SessionServiceHost,
   cmd: string,
-  args?: { num?: number },
+  args?: { num?: number; force?: boolean },
 ): Promise<unknown> {
   switch (cmd) {
     case "list":
@@ -22,6 +22,8 @@ export async function handleControlCommand(
       return killSession(host, Number(args?.num));
     case "prune":
       return pruneEnded(host);
+    case "restart":
+      return host.requestRestart({ skipPreflight: args?.force, exitDelayMs: 300 });
     default:
       throw new Error(`unknown command: ${cmd}`);
   }
@@ -38,7 +40,7 @@ export function startControlServer(host: SessionServiceHost): Server {
       const line = buf.slice(0, nl);
       void (async () => {
         try {
-          const { cmd, args } = JSON.parse(line) as { cmd: string; args?: { num?: number } };
+          const { cmd, args } = JSON.parse(line) as { cmd: string; args?: { num?: number; force?: boolean } };
           const data = await handleControlCommand(host, cmd, args);
           sock.end(JSON.stringify({ ok: true, data }) + "\n");
         } catch (err) {

@@ -152,10 +152,37 @@ function stop(): void {
   console.log("stopped");
 }
 
-function restart(): void {
-  if (!isLoaded()) return start();
-  sh(["launchctl", "kickstart", "-k", `${DOMAIN}/${LABEL}`]);
-  console.log("restarted");
+async function restart(force: boolean): Promise<void> {
+  try {
+    const before = daemonPid();
+    const res = await sendControl("restart", { force });
+    const data = res.data as { ok: boolean; sha: string; error?: string } | undefined;
+    if (!res.ok || !data?.ok) {
+      console.error(`preflight failed — not restarting:\n${data?.error ?? res.error ?? "unknown error"}`);
+      console.error("re-run with --force to skip the typecheck");
+      process.exit(1);
+    }
+    console.log(`restarting on ${data.sha}… (launchd will bring it back)`);
+    await waitForRespawn(before);
+    console.log("back up");
+  } catch (err) {
+    if (!isDaemonDown(err)) throw err;
+    console.log("daemon not running — starting it");
+    start();
+  }
+}
+
+/** Poll until launchd hands the daemon a new pid (or we give up). */
+function waitForRespawn(oldPid: string | undefined): Promise<void> {
+  return new Promise((resolve) => {
+    const deadline = Date.now() + 20_000;
+    const tick = (): void => {
+      const pid = daemonPid();
+      if ((pid && pid !== oldPid) || Date.now() > deadline) return resolve();
+      setTimeout(tick, 500);
+    };
+    setTimeout(tick, 800); // wait past the daemon's ~300ms exit delay before polling
+  });
 }
 
 function status(): void {
@@ -238,6 +265,7 @@ export function offlineHost(): SessionServiceHost {
     runtimeInfo: () => undefined,
     dropRuntime: async () => undefined,
     archiveSession: async () => undefined,
+    requestRestart: async () => ({ ok: false, sha: "unknown", error: "daemon not running" }),
   };
 }
 
@@ -328,7 +356,7 @@ if (import.meta.main) {
       stop();
       break;
     case "restart":
-      restart();
+      await restart(process.argv.includes("--force"));
       break;
     case "status":
       status();

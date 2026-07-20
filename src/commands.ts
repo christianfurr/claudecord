@@ -72,6 +72,9 @@ export const commandDefinitions = [
   new SlashCommandBuilder().setName("sessions").setDescription("List all Claude sessions with status, cost, and age"),
   new SlashCommandBuilder().setName("end-all").setDescription("End every active session (owner only)"),
   new SlashCommandBuilder().setName("kill").setDescription("Force-end this session immediately, even mid-turn"),
+  new SlashCommandBuilder()
+    .setName("restart")
+    .setDescription("Restart the bot on the latest code (typechecks first; this post resumes automatically)"),
   new SlashCommandBuilder().setName("reminders").setDescription("List your pending reminders"),
   new SlashCommandBuilder()
     .setName("cancel")
@@ -114,6 +117,8 @@ export async function handleCommand(app: Claudecord, interaction: ChatInputComma
       return handleEndAll(app, interaction);
     case "kill":
       return handleKill(app, interaction);
+    case "restart":
+      return handleRestart(app, interaction);
     case "reminders":
       return handleReminders(app, interaction);
     case "cancel":
@@ -287,6 +292,22 @@ async function handleKill(app: Claudecord, interaction: ChatInputCommandInteract
   await interaction.deferReply();
   const res = await killSession(app, record.sessionNum);
   await interaction.editReply(res.error ? `Could not kill: ${res.error}` : `Killed session #${res.num}.`);
+}
+
+async function handleRestart(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {
+  const thread = sessionThread(app, interaction);
+  await interaction.reply({
+    content: "🔄 Typechecking, then restarting…",
+    flags: MessageFlags.Ephemeral,
+  });
+  const res = await app.requestRestart({ threadId: thread?.id, exitDelayMs: 1500 });
+  if (!res.ok) {
+    await interaction.editReply(
+      `❌ Preflight failed — not restarting:\n\`\`\`\n${res.error?.slice(0, 1800) ?? "typecheck failed"}\n\`\`\``,
+    );
+    return;
+  }
+  await interaction.editReply(`✅ Preflight passed. Restarting on \`${res.sha}\` — back in a couple seconds.`);
 }
 
 async function handleModel(app: Claudecord, interaction: ChatInputCommandInteraction): Promise<void> {

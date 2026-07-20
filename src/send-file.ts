@@ -6,6 +6,7 @@ import { readFileSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { isDatalessStat, validateOutboundFile } from "./files.js";
 import { formatReminder, type Reminder, type ReminderKind } from "./reminders.js";
+import type { RestartResult } from "./restart.js";
 
 /** Fully-qualified name of the tool as Claude sees it (server "discord" + tool "send_file"). */
 export const SEND_FILE_TOOL = "mcp__discord__send_file";
@@ -29,6 +30,7 @@ export interface ReminderServices {
   list(): Reminder[];
   cancel(id: string): boolean;
   pingOwner(text: string): Promise<void>;
+  restart(): Promise<RestartResult>;
 }
 
 function isValidTimeZone(tz: string): boolean {
@@ -191,6 +193,32 @@ export function createDiscordMcpServer(thread: AnyThreadChannel, services: Remin
           return ok
             ? { content: [{ type: "text", text: `Canceled reminder ${id}.` }] }
             : { isError: true, content: [{ type: "text", text: `No reminder with id ${id}.` }] };
+        },
+      ),
+      tool(
+        "restart",
+        "Restart the claudecord bot so your code changes take effect, then resume this " +
+          "conversation. Call this ONLY when the user explicitly asks you to restart after you've " +
+          "edited claudecord's own source. It typechecks first and refuses to restart if that fails. " +
+          "The bot goes down for a couple seconds and comes back on the new code; this post resumes " +
+          "automatically and posts a confirmation. Your current turn ends when the restart fires.",
+        {},
+        async () => {
+          const res = await services.restart();
+          if (!res.ok) {
+            return {
+              isError: true,
+              content: [{ type: "text", text: `Preflight failed — not restarting:\n${res.error ?? "typecheck failed"}` }],
+            };
+          }
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Preflight passed. Restarting on ${res.sha} — back in a couple seconds; this post picks up where we left off.`,
+              },
+            ],
+          };
         },
       ),
     ],
