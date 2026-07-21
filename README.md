@@ -46,6 +46,10 @@ New post → new session. Claude works right in the post — thinking, tool call
   session id and opens a new post that continues the same conversation, so you can
   walk away from your machine and keep going from your phone. See
   [Continue a terminal session in Discord](#continue-a-terminal-session-in-discord).
+- 📨 **DM from outside agents** — any agent on your machine (another Claude Code
+  session, a build script, a cron job) can DM you via the `dm_me` MCP tool, tagged
+  with which agent it came from. DM-only, so it's strictly safer than a handoff. See
+  [DM yourself from an outside agent](#dm-yourself-from-an-outside-agent).
 - 🔔 **Pings & reminders** — Claude can get your attention when it matters. It
   DMs you and mentions you in the post the moment it's blocked, done, or hit
   something you'd want to know (`ping_me`), and it can schedule one-shot
@@ -216,6 +220,27 @@ The handoff is a one-way baton pass: it forks a new session id from your termina
 session's history, so the Discord side and your (now-abandoned) terminal session never
 write to the same file. The bot must be running (`claudecord status`); a handoff fired
 while it's down is processed when it next starts.
+
+## DM yourself from an outside agent
+
+Any agent on this machine — another Claude Code session, a build script, a cron job —
+can DM you through claudecord with the `dm_me` tool. It rides the same MCP server as the
+handoff, so the [one-time setup above](#continue-a-terminal-session-in-discord)
+(`claude mcp add --scope user claudecord -- claudecord mcp`) is all it needs.
+
+**Usage** — the agent calls `dm_me(message, from?)`; you get a Discord DM. Pass `from`
+so you know which agent pinged you:
+
+```
+dm_me(message: "nightly build passed", from: "rust-academy")
+→ DM: 📨 rust-academy: nightly build passed
+```
+
+It's a DM only — it can't post in a channel, run a turn, or wake a session, which makes
+it strictly safer than a handoff. The request is dropped as a file in
+`~/.claudecord/notifications/` and delivered by the running bot; one fired while the bot
+is down is delivered when it next starts. Trust is filesystem-scoped: any local process
+that can write that directory can DM you (same model as the handoff).
 
 ## Configuration
 

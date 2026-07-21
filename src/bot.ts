@@ -15,6 +15,12 @@ import { CONFIG_DIR, loadSettings, saveSettings, type Settings } from "./config.
 import { SessionRuntime, type UserContent } from "./session.js";
 import { welcomeEmbed, endedEmbed } from "./format.js";
 import { readHandoff, quarantineHandoff, HANDOFF_DIR, type HandoffRequest } from "./handoffs.js";
+import {
+  readNotification,
+  quarantineNotification,
+  formatDm,
+  NOTIFY_DIR,
+} from "./notifications.js";
 import { MAX_INBOUND_BYTES, sanitizeFilename } from "./files.js";
 import type { RuntimeInfo, SessionServiceHost } from "./sessions.js";
 import { ReminderStore, type Reminder } from "./reminders.js";
@@ -287,6 +293,40 @@ export class Claudecord implements SessionServiceHost {
       console.error("handoff failed:", err);
       try {
         quarantineHandoff(path);
+      } catch {
+        /* file may already be gone */
+      }
+    }
+  }
+
+  /** Drain pending DM-request files, then watch for new ones (the `dm_me` tool). */
+  startNotificationWatcher(): void {
+    mkdirSync(NOTIFY_DIR, { recursive: true });
+    for (const name of readdirSync(NOTIFY_DIR)) {
+      if (name.endsWith(".json")) void this.processNotificationFile(join(NOTIFY_DIR, name));
+    }
+    watch(NOTIFY_DIR, (_event, filename) => {
+      if (filename && filename.endsWith(".json")) {
+        void this.processNotificationFile(join(NOTIFY_DIR, filename));
+      }
+    });
+  }
+
+  private async processNotificationFile(path: string): Promise<void> {
+    let text: string;
+    try {
+      text = formatDm(readNotification(path));
+    } catch {
+      return; // partial write / .tmp rename in flight, or already processed — ignore
+    }
+    try {
+      const delivered = await dmOwner(this.client, this.settings.ownerId, text);
+      if (!delivered) throw new Error("DM delivery failed (no owner, or DMs closed)");
+      unlinkSync(path);
+    } catch (err) {
+      console.error("notification failed:", err);
+      try {
+        quarantineNotification(path);
       } catch {
         /* file may already be gone */
       }

@@ -3,6 +3,26 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { findLatestSessionId, writeHandoff, HANDOFF_DIR } from "./handoffs.js";
+import { writeNotification, NOTIFY_DIR, MAX_MESSAGE_LEN, MAX_FROM_LEN } from "./notifications.js";
+
+interface RunDmOpts {
+  message: string;
+  from?: string;
+  now?: string;
+  dir?: string;
+}
+
+/** Core of the dm_me tool: queue a notification file for the daemon to deliver. */
+export function runDm(opts: RunDmOpts): { message: string; path: string } {
+  const path = writeNotification(
+    { message: opts.message, from: opts.from?.trim() || undefined, createdAt: opts.now ?? new Date().toISOString() },
+    opts.dir ?? NOTIFY_DIR,
+  );
+  return {
+    message: "Notification queued — the owner will get a DM shortly.",
+    path,
+  };
+}
 
 interface RunHandoffOpts {
   cwd: string;
@@ -50,6 +70,36 @@ export async function startMcpServer(): Promise<void> {
         return {
           content: [
             { type: "text", text: `Handoff failed: ${err instanceof Error ? err.message : String(err)}` },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "dm_me",
+    "Send the claudecord owner a Discord DM from outside claudecord. Use this from any agent " +
+      "or Claude Code session on this machine to get the owner's attention — a build finished, a " +
+      "job needs input, an error they'd want to know about. Delivery is a DM only: it cannot post " +
+      "in a channel, run a turn, or wake a session. Pass `from` so the owner knows which agent " +
+      "pinged them.",
+    {
+      message: z.string().max(MAX_MESSAGE_LEN).describe("The message to DM the owner."),
+      from: z
+        .string()
+        .max(MAX_FROM_LEN)
+        .optional()
+        .describe("Optional label for who is sending this, e.g. 'rust-academy build'."),
+    },
+    async ({ message, from }) => {
+      try {
+        const { message: reply } = runDm({ message, from });
+        return { content: [{ type: "text", text: reply }] };
+      } catch (err) {
+        return {
+          content: [
+            { type: "text", text: `DM failed: ${err instanceof Error ? err.message : String(err)}` },
           ],
           isError: true,
         };

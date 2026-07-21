@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.CLAUDECORD_HOME = mkdtempSync(join(tmpdir(), "cc-mcp-"));
-const { runHandoff } = await import("./mcp.js");
+const { runHandoff, runDm } = await import("./mcp.js");
 const { encodeProjectDir, readHandoff } = await import("./handoffs.js");
+const { readNotification } = await import("./notifications.js");
 
 let home: string;
 let handoffDir: string;
@@ -41,4 +42,18 @@ test("runHandoff derives a title from the cwd basename when none given", () => {
 
 test("runHandoff throws when there is no session to hand off", () => {
   expect(() => runHandoff({ cwd: "/nope", home, now: "T", dir: handoffDir })).toThrow();
+});
+
+test("runDm queues a notification file with the message and source label", () => {
+  const res = runDm({ message: "build done", from: "rust-academy", now: "T", dir: handoffDir });
+  expect(existsSync(res.path)).toBe(true);
+  const req = readNotification(res.path);
+  expect(req.message).toBe("build done");
+  expect(req.from).toBe("rust-academy");
+  expect(res.message).toContain("DM");
+});
+
+test("runDm drops a blank from label rather than storing it", () => {
+  const res = runDm({ message: "hi", from: "   ", now: "T", dir: handoffDir });
+  expect(readNotification(res.path).from).toBeUndefined();
 });

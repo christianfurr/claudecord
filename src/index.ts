@@ -32,6 +32,9 @@ app.client.once(Events.ClientReady, async (client) => {
   app.startHandoffWatcher();
   console.log("watching for terminal handoffs");
 
+  app.startNotificationWatcher();
+  console.log("watching for external DM requests");
+
   app.startScheduler();
   console.log("reminder scheduler started");
 
