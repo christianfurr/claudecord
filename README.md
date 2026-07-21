@@ -47,8 +47,9 @@ New post → new session. Claude works right in the post — thinking, tool call
   walk away from your machine and keep going from your phone. See
   [Continue a terminal session in Discord](#continue-a-terminal-session-in-discord).
 - 📨 **DM from outside agents** — any agent on your machine (another Claude Code
-  session, a build script, a cron job) can DM you via the `dm_me` MCP tool, tagged
-  with which agent it came from. DM-only, so it's strictly safer than a handoff. See
+  session, a build script, a cron job) can DM you via the `dm_me` MCP tool, delivered
+  as a lime-accented embed tagged with which agent it came from and with markdown
+  rendered. DM-only, so it's strictly safer than a handoff. See
   [DM yourself from an outside agent](#dm-yourself-from-an-outside-agent).
 - 🔔 **Pings & reminders** — Claude can get your attention when it matters. It
   DMs you and mentions you in the post the moment it's blocked, done, or hit
@@ -228,12 +229,14 @@ can DM you through claudecord with the `dm_me` tool. It rides the same MCP serve
 handoff, so the [one-time setup above](#continue-a-terminal-session-in-discord)
 (`claude mcp add --scope user claudecord -- claudecord mcp`) is all it needs.
 
-**Usage** — the agent calls `dm_me(message, from?)`; you get a Discord DM. Pass `from`
-so you know which agent pinged you:
+**Usage** — the agent calls `dm_me(message, from?)`; you get a Discord DM as a
+lime-accented embed, titled with which agent pinged you. The message is the embed
+description, so **Discord markdown renders** — the tool tells the agent to use bold,
+lists, code blocks, and links when they make the message cleaner:
 
 ```
-dm_me(message: "nightly build passed", from: "rust-academy")
-→ DM: 📨 rust-academy: nightly build passed
+dm_me(message: "**nightly build passed** — 0 failures", from: "rust-academy")
+→ DM: lime embed, author "📨 rust-academy", body renders the bold text
 ```
 
 It's a DM only — it can't post in a channel, run a turn, or wake a session, which makes

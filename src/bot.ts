@@ -15,17 +15,12 @@ import { CONFIG_DIR, loadSettings, saveSettings, type Settings } from "./config.
 import { SessionRuntime, type UserContent } from "./session.js";
 import { welcomeEmbed, endedEmbed } from "./format.js";
 import { readHandoff, quarantineHandoff, HANDOFF_DIR, type HandoffRequest } from "./handoffs.js";
-import {
-  readNotification,
-  quarantineNotification,
-  formatDm,
-  NOTIFY_DIR,
-} from "./notifications.js";
+import { readNotification, quarantineNotification, NOTIFY_DIR } from "./notifications.js";
 import { MAX_INBOUND_BYTES, sanitizeFilename } from "./files.js";
 import type { RuntimeInfo, SessionServiceHost } from "./sessions.js";
 import { ReminderStore, type Reminder } from "./reminders.js";
 import { Scheduler } from "./scheduler.js";
-import { dmOwner, postToThread } from "./notify.js";
+import { dmOwner, dmOwnerEmbed, notificationEmbed, postToThread } from "./notify.js";
 import { dispatchReminder } from "./fire.js";
 import type { ReminderServices } from "./send-file.js";
 import {
@@ -313,14 +308,15 @@ export class Claudecord implements SessionServiceHost {
   }
 
   private async processNotificationFile(path: string): Promise<void> {
-    let text: string;
+    let embed: ReturnType<typeof notificationEmbed>;
     try {
-      text = formatDm(readNotification(path));
+      const req = readNotification(path);
+      embed = notificationEmbed(req.message, req.from, req.createdAt);
     } catch {
       return; // partial write / .tmp rename in flight, or already processed — ignore
     }
     try {
-      const delivered = await dmOwner(this.client, this.settings.ownerId, text);
+      const delivered = await dmOwnerEmbed(this.client, this.settings.ownerId, embed);
       if (!delivered) throw new Error("DM delivery failed (no owner, or DMs closed)");
       unlinkSync(path);
     } catch (err) {

@@ -83,9 +83,17 @@ export async function startMcpServer(): Promise<void> {
       "or Claude Code session on this machine to get the owner's attention — a build finished, a " +
       "job needs input, an error they'd want to know about. Delivery is a DM only: it cannot post " +
       "in a channel, run a turn, or wake a session. Pass `from` so the owner knows which agent " +
-      "pinged them.",
+      "pinged them. The message is rendered in a Discord embed, so format it with Discord " +
+      "markdown when it improves readability: **bold**, *italics*, `inline code`, ```code " +
+      "blocks```, > quotes, - bullet lists, and [links](https://example.com).",
     {
-      message: z.string().max(MAX_MESSAGE_LEN).describe("The message to DM the owner."),
+      message: z
+        .string()
+        .max(MAX_MESSAGE_LEN)
+        .describe(
+          "The message to DM the owner. Supports Discord markdown (bold, italics, code, lists, " +
+            "links) — use it for a cleaner view when the content warrants structure.",
+        ),
       from: z
         .string()
         .max(MAX_FROM_LEN)

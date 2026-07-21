@@ -8,7 +8,6 @@ const {
   writeNotification,
   readNotification,
   quarantineNotification,
-  formatDm,
   NOTIFY_FAILED_DIR,
   MAX_MESSAGE_LEN,
   MAX_FROM_LEN,
@@ -75,12 +74,4 @@ test("quarantineNotification moves malformed files into failed/", () => {
   quarantineNotification(bad, 42);
   expect(existsSync(bad)).toBe(false);
   expect(existsSync(join(NOTIFY_FAILED_DIR, "42-bad.json"))).toBe(true);
-});
-
-test("formatDm prefixes with the source label when present", () => {
-  expect(formatDm({ message: "hi", from: "cron", createdAt: "now" })).toBe("📨 cron: hi");
-});
-
-test("formatDm returns the plain message without a label", () => {
-  expect(formatDm({ message: "hi", createdAt: "now" })).toBe("hi");
 });

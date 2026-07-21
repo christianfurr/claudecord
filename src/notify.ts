@@ -1,4 +1,41 @@
-import type { Client, MessageCreateOptions } from "discord.js";
+import { EmbedBuilder, type Client, type MessageCreateOptions } from "discord.js";
+
+/** claudecord's lime accent, used for `dm_me` notification embeds. */
+export const LIME = 0xa3e635;
+
+/**
+ * Build the lime-accented embed for a `dm_me` notification. The message is the
+ * description, so Discord markdown in it renders (bold, lists, code, links).
+ */
+export function notificationEmbed(message: string, from?: string, createdAt?: string): EmbedBuilder {
+  const label = from?.trim();
+  const embed = new EmbedBuilder()
+    .setColor(LIME)
+    .setAuthor({ name: label ? `📨 ${label}` : "📨 New message" })
+    .setDescription(message);
+  if (createdAt) {
+    const ts = new Date(createdAt);
+    if (!Number.isNaN(ts.getTime())) embed.setTimestamp(ts);
+  }
+  return embed;
+}
+
+/** DM the owner a rich embed. Best-effort, mirrors `dmOwner`. */
+export async function dmOwnerEmbed(
+  client: Client,
+  ownerId: string | undefined,
+  embed: EmbedBuilder,
+): Promise<boolean> {
+  if (!ownerId) return false;
+  try {
+    const user = await client.users.fetch(ownerId);
+    await user.send({ embeds: [embed] });
+    return true;
+  } catch (err) {
+    console.error("dmOwnerEmbed failed:", err);
+    return false;
+  }
+}
 
 /**
  * Delivery helpers over the Discord client, isolating all DM/mention logic in

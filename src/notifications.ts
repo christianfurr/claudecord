@@ -30,12 +30,6 @@ const notifySchema = z.object({
 
 export type NotificationRequest = z.infer<typeof notifySchema>;
 
-/** Render the DM text: prefixed with the source label when one is given. */
-export function formatDm(req: NotificationRequest): string {
-  const from = req.from?.trim();
-  return from ? `📨 ${from}: ${req.message}` : req.message;
-}
-
 let counter = 0;
 
 /**
